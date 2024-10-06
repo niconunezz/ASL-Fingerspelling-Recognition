@@ -19,6 +19,7 @@ lib64/
 parts/
 sdist/
 data/
+test/
 var/
 wheels/
 share/python-wheels/
@@ -53,7 +54,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
-
+*.txt
 # Translations
 *.mo
 *.pot
