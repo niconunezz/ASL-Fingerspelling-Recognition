@@ -61,6 +61,8 @@ cover/
 shit.py
 *.csv
 # Django stuff:
+*.parquet
+
 *.log
 local_settings.py
 db.sqlite3
