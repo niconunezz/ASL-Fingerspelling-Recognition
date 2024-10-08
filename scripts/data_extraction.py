@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
-
 import sys
 import time
+from tqdm import tqdm
 
 class Extractor():
 
@@ -12,47 +12,47 @@ class Extractor():
         self.unique_files = [1019715464, 1021040628]
         self.mapper = {file : self.train_df.loc[self.train_df['file_id'] == file].sequence_id.unique() for file in self.unique_files}
     
-    
+        self.drop_rows(self.mapper)
+
+    def drop_rows(self, mapper):
+        for file in self.unique_files:
+            f = pd.read_parquet(f"data/train_landmarks/{file}.parquet")
+            to_drop = f.groupby('sequence_id').filter(lambda x: len(x) <= 130).index
+            f.drop(to_drop, inplace=True)
+            f.to_parquet(f"data/train_landmarks/{file}.parquet")
+
     def extract(self):
         for file in self.unique_files:
             f = pd.read_parquet(f"data/train_landmarks/{file}.parquet")
-            for sequence in self.mapper[file]:
+            # to_drop = f.groupby('sequence_id').filter(lambda x: len(x) <= 130).index
+            # f.drop(to_drop, inplace=True)
+
+            for sequence in (self.mapper[file]):
                 curr_sqnce = f.loc[f.index == sequence]
+
                 kpoints = ['right_hand', 'left_hand', 'face', 'pose']
                 ranges = [21, 21, 76, 12]
-                
 
-                # print(curr_sqnce["x_right_hand_0"].iloc[12])
+                print(curr_sqnce.shape)
 
-                
-                # for frame in range(0,5):
-                #     for i in range(21):
-                #         try:
-                #             print(curr_sqnce[f"x_right_hand_{i}"].iloc[frame])
-                #         except IndexError:
-                #             print(f" Error en frame {frame} y punto {i}")
-                            # sys.exit()
+                something = [curr_sqnce.loc[:130, f'{dim}_{col}_0' : f"{dim}_{col}_{r}"].to_numpy()
+                for dim in ['x','y', 'z']
+                for col, r in zip(kpoints, ranges)]
 
-                print(curr_sqnce[f"x_right_hand_0"].iloc[3])
+                for s in something:
+                    print(s.shape)
+
+
                 sys.exit()
                 # data = {}
                 # for col, r in zip(kpoints, ranges):
-                #     data[col] = [[[curr_sqnce[f"{dim}_{col}_{i}"].iloc[5]
-                #                     for dim in ['x', 'y', 'z']]
-                #                     for i in range(r)]
-                #                     for frame in range(0,5)]
-                #     break
+                #     data[col] = [[[curr_sqnce[f"{dim}_{col}_{i}"].iloc[frame]
+                #                 for dim in ['x', 'y', 'z']]
+                #                 for i in range(r)]
+                #                 for frame in range(130)]
+
+                
         
-    
-    
-                
-
-
-
-                
-
-
-
 
     def get_mapper(self):
         return self.mapper
