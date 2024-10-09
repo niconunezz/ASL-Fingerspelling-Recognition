@@ -3,6 +3,8 @@ import numpy as np
 import sys
 import time
 from tqdm import tqdm
+from tokenizer import RegexTokenizer
+from typing import Tuple
 
 class Extractor():
 
@@ -10,52 +12,75 @@ class Extractor():
         self.train_df = pd.read_csv("data/train.csv")
         # self.unique_files = self.train_df.file_id.unique
         self.unique_files = [1019715464, 1021040628]
-        self.mapper = {file : self.train_df.loc[self.train_df['file_id'] == file].sequence_id.unique() for file in self.unique_files}
-    
-        self.drop_rows(self.mapper)
 
-    def drop_rows(self, mapper):
+        self.mapper = {file : self.train_df.loc[self.train_df['file_id'] == file].sequence_id.unique() for file in self.unique_files}
+
+        #TODO must obviously refactor haha
+        self.sequence_to_phrase = {}
         for file in self.unique_files:
-            f = pd.read_parquet(f"data/train_landmarks/{file}.parquet")
-            to_drop = f.groupby('sequence_id').filter(lambda x: len(x) <= 130).index
-            f.drop(to_drop, inplace=True)
-            f.to_parquet(f"data/train_landmarks/{file}.parquet")
+            for sequence in self.mapper[file]:
+                phrase = self.train_df.loc[(self.train_df['sequence_id'] == sequence)].phrase.values[0]
+                self.sequence_to_phrase[sequence] = phrase
+                
+            
+        self.tok = RegexTokenizer()
+        self.merges, self.vocab = self.init_tokenizer()
+
+       
+    
+    def init_tokenizer(self) -> tuple[dict, dict]:
+        t = pd.read_csv("data/train.csv")
+        text = ' '.join(t.loc[:, 'phrase'].values)
+        tokens, merges = self.tok.train(text, 275, True)
+
+        vocab = {idx: bytes([idx]) for idx in range(256)}
+
+        for (el0, el1), v in merges.items():
+            vocab[v] = vocab[el0] + vocab[el1]
+        
+        return merges, vocab
+    
+
+    
+    
 
     def extract(self):
         for file in self.unique_files:
             f = pd.read_parquet(f"data/train_landmarks/{file}.parquet")
-            # to_drop = f.groupby('sequence_id').filter(lambda x: len(x) <= 130).index
-            # f.drop(to_drop, inplace=True)
-
+            
+            examples = []
             for sequence in (self.mapper[file]):
-                curr_sqnce = f.loc[f.index == sequence]
-
-                kpoints = ['right_hand', 'left_hand', 'face', 'pose']
-                ranges = [21, 21, 76, 12]
-
-                print(curr_sqnce.shape)
-
-                something = [curr_sqnce.loc[:130, f'{dim}_{col}_0' : f"{dim}_{col}_{r}"].to_numpy()
-                for dim in ['x','y', 'z']
-                for col, r in zip(kpoints, ranges)]
-
-                for s in something:
-                    print(s.shape)
-
-
+                
+                #TODO: think about the regez pattern of the tokenizer,
+                #TODO a lot of phone numbers are being tokenized as a single token
+                
+                print(self.sequence_to_phrase[sequence])
+                print(self.tok.encode(self.sequence_to_phrase[sequence], self.merges))
                 sys.exit()
-                # data = {}
-                # for col, r in zip(kpoints, ranges):
-                #     data[col] = [[[curr_sqnce[f"{dim}_{col}_{i}"].iloc[frame]
-                #                 for dim in ['x', 'y', 'z']]
-                #                 for i in range(r)]
-                #                 for frame in range(130)]
+
+
+
+                curr_sqnce = f.loc[f.index == sequence]
+                if curr_sqnce.shape[0] == 0 or curr_sqnce.shape[0] < 130:
+                    continue
 
                 
-        
+                kpoints = ['right_hand', 'left_hand', 'face', 'pose']
+                ranges = [20, 20, 75, 11]
 
-    def get_mapper(self):
-        return self.mapper
+                array = [np.stack([curr_sqnce.iloc[:130].loc[:, f'{dim}_{kpoint}_0' : f"{dim}_{kpoint}_{r}"].to_numpy()
+                                      for dim in ['x','y','z']], axis=2)
+                                      for kpoint, r in zip(kpoints, ranges)]
+                
+                assert array[0].shape == (130, 21, 3)
+                examples.append(array)
+            
+
+            
+            # np.savez_compressed(f"data/extracted/{file}.npz", np.array(examples))
+                
+                
+                
 
 
 ex = Extractor()
