@@ -7,7 +7,7 @@ from tokenizer import RegexTokenizer
 class Extractor():
 
     def __init__(self):
-        self.train_df = pd.read_csv("data/train.csv")
+        self.train_df = pd.read_csv("data/merged.csv")
 
         self.sequence_to_phrase = {sequence: phrase for sequence, phrase in zip(self.train_df.sequence_id, self.train_df.phrase)}
         
