@@ -4,6 +4,7 @@ import sys
 import time
 from tqdm import tqdm
 import json
+import pickle
 from tokenizer import RegexTokenizer
 from typing import Tuple
 
@@ -24,6 +25,7 @@ class Extractor():
             
         self.tok = RegexTokenizer()
         self.merges, self.vocab = self.init_tokenizer()
+        
 
        
     
@@ -34,13 +36,15 @@ class Extractor():
         maxm = 0
         
         text = ' '.join(t.loc[:, 'phrase'].values)
-        tokens, merges = self.tok.train(text, 275, True)
+        tokens, merges = self.tok.train(text, 500, True)
 
         vocab = {idx: bytes([idx]) for idx in range(256)}
 
         for (el0, el1), v in merges.items():
             vocab[v] = vocab[el0] + vocab[el1]
         
+        with open("data/extractor.pkl", "wb") as f:
+            pickle.dump(vocab, f)
         return merges, vocab
     
     def add_padding(self, array: list, max_len: int) -> np.ndarray:
@@ -91,7 +95,8 @@ class Extractor():
 
                 
             np.savez_compressed(f"data/extracted/{file}.npz", np.array(examples), np.array(labels))
-                
+    
+  
                 
                 
 
@@ -101,6 +106,8 @@ t1  = time.time()
 ex.extract()
 t2 = time.time()
 print(t2-t1)
+
+
 
         
 
