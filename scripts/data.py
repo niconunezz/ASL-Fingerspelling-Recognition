@@ -1,16 +1,16 @@
 import pandas as pd
 from torch.utils.data import DataLoader, Dataset
-import json
+import os
 import numpy as np
 
-train_df = pd.read_csv("/kaggle/input/asl-fingerspelling/train.csv")
 
 class CustomDataset(Dataset):
-    def __init__(self, df, config, mode='train'):
-        
-        self.df = df.copy()
-        self.config = config
-        self.mode = mode
-    
-        with open(config.data_path + "selected_columns.json", "r") as f:
-            columns = json.load(f)
+    def __init__(self):
+        self.files = {k:v for k, v in enumerate(os.listdir("data/extracted"))}
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        f = np.load(f"data/extracted/{self.files[idx]}")
+        return f['arr_0'], f['arr_1']
