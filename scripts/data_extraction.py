@@ -7,12 +7,12 @@ from tokenizer import RegexTokenizer
 class Extractor():
 
     def __init__(self):
-        self.train_df = pd.read_csv("data/merged.csv")
+        self.train_df = train_df = pd.read_csv("data/merged.csv")
 
-        self.sequence_to_phrase = {sequence: phrase for sequence, phrase in zip(self.train_df.sequence_id, self.train_df.phrase)}
+        self.sequence_to_phrase = {sequence: phrase for sequence, phrase in zip(train_df.sequence_id, train_df.phrase)}
         
-        self.unique_files = self.train_df.file_id.unique()
-        self.file_to_sequences = {file : self.train_df.loc[self.train_df['file_id'] == file].sequence_id for file in self.unique_files}
+        self.unique_files = unique_files = train_df.file_id.unique()
+        self.file_to_sequences = {file : train_df.loc[train_df['file_id'] == file].sequence_id for file in unique_files}
 
 
         self.tok = RegexTokenizer()
