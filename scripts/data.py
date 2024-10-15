@@ -7,16 +7,18 @@ import torch
 class CustomDataset(Dataset):
     def __init__(self) -> None:
         #! must take out the [:5] for the final version
-        self.files = os.listdir("data/extracted")[:5]
+        self.files = os.listdir("data/extracted")[1:5]
         self.data = []
         self.labels = []
 
         for file in self.files:
             f = np.load(f"data/extracted/{file}")
             x = torch.from_numpy(f['arr_0'])
-            print(x.shape)
-            print(f['arr_1'])
-            y = torch.from_numpy(f['arr_1'])
+            
+            try:
+                y = torch.tensor(f['arr_1'])
+            except TypeError:
+                continue
             self.data.extend(torch.unbind(x, dim=0))
             self.labels.extend(torch.unbind(y,dim=0))
 
