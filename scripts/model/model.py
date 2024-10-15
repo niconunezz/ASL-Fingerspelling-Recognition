@@ -28,7 +28,7 @@ class FeatureExtraction(nn.Module):
 
 
 class Net(nn.Module):
-    def __init__(self, out_dim):
+    def __init__(self):
         super(Net, self).__init__()
         self.feature_extraction = FeatureExtraction(out_dim = 208)
         self.face_fe = FeatureExtraction(out_dim = 52, height=75)
