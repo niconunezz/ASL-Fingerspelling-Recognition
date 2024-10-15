@@ -17,6 +17,7 @@ class Extractor():
 
         self.tok = RegexTokenizer()
         self.merges, self.vocab = self.init_tokenizer(vocab_size=500)
+        print("Tokenizer initialized")
         self.vocab_size = len(self.vocab) + 1 # +1 for padding token
         
 
@@ -66,15 +67,20 @@ class Extractor():
                                         for dim in ['x','y','z']], axis=2)
                                         for kpoint, r in zip(kpoints, ranges)], axis=1)
                 assert array.shape == (130, 130, 3), "something wrong, array shape: {array.shape}"
-                examples.append(array)
 
                 tokenized_phrase = self.tok.encode(self.sequence_to_phrase[sequence], self.merges)
+                if not isinstance(tokenized_phrase[0], int):
+                    continue
+
+                examples.append(array)
+
+                
                 padded = self.add_padding(tokenized_phrase, max_len=31)
                 assert padded.shape == (31,), f"something wrong, padded shape: {padded.shape}"
                 labels.append(padded)
 
                 
-            np.savez_compressed(f"data/extracted/{file}.npz", np.array(examples), np.array(labels))
+            np.savez_compressed(f"data/extractedf/{file}.npz", np.array(examples), np.array(labels))
     
 
 if __name__ == "__main__":
