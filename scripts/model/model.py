@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from timm.layers.norm_act import BatchNormAct2d
-
+from model.encoder import SqueezeformerBlock
 
 
 class FeatureExtraction(nn.Module):
@@ -23,19 +23,20 @@ class FeatureExtraction(nn.Module):
         xc = xc.flatten(1) # B, 32 * H * W//2
         xc = self.stem_linear(xc) # B, out_dim
         xc = self.stem_bn(xc) # B, out_dim
-        print(xc.shape)
         return xc
 
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, config):
         super(Net, self).__init__()
+        self.n_heads = n_heads = config.n_heads
         self.feature_extraction = FeatureExtraction(out_dim = 208)
         self.face_fe = FeatureExtraction(out_dim = 52, height=75)
         self.pose_fe = FeatureExtraction(out_dim = 52, height=15)
         self.lhand = FeatureExtraction(out_dim = 52, height=20)
         self.rhand = FeatureExtraction(out_dim = 52, height=20)
         
+        self.sqz = SqueezeformerBlock(config)
 
     def forward(self, data):
         right_hand = data[:, :, :20, :]
@@ -52,6 +53,7 @@ class Net(nn.Module):
 
         ccat = torch.cat([face, pose, left_hand, right_hand], dim=1)
         xc = all_together + ccat
+        xc = self.sqz(xc)
 
 
         return xc
