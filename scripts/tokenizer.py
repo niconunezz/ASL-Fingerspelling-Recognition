@@ -113,3 +113,12 @@ class RegexTokenizer:
     
 
 
+# a = RegexTokenizer()
+# with open("scripts/tests/taylorswift.txt", "r") as f:
+#     text = f.read()
+
+# print(len(text))
+
+# tokens, merges = a.train(text, 275, verbose = True)
+
+# print((a.encode("I love you so much merry christmas", merges)))
