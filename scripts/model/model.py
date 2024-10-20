@@ -13,16 +13,20 @@ class FeatureExtraction(nn.Module):
         self.in_channels = in_channels = 32 * math.ceil(height / 2)
         self.conv_stem = nn.Conv2d(channels, 32, kernel_size=(3, 3), stride=(1,2), padding=(1, 1), bias=False)
         self.bn_conv = BatchNormAct2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True,act_layer = nn.SiLU,drop_layer=None)
-        self.stem_linear = nn.Linear(width * in_channels, out_dim, bias=False)
+        self.stem_linear = nn.Linear(in_channels, out_dim, bias=False)
         self.stem_bn = nn.BatchNorm1d(out_dim, momentum=0.95)
 
     def forward(self, data):
         xc = data.permute(0, 3, 1, 2) # B, C, H, W
         xc = self.conv_stem(xc) # B, 32, H, W//2
         xc = self.bn_conv(xc) # B, 32, H, W//2
-        xc = xc.flatten(1) # B, 32 * H * W//2
+        xc = xc.reshape(*data.shape[:2], -1) # B, H, 32 * W//2
         xc = self.stem_linear(xc) # B, out_dim
-        xc = self.stem_bn(xc) # B, out_dim
+
+        B, T, C = xc.shape
+        xc = xc.view(1, -1, C)
+        xc = self.stem_bn(xc.permute(0, 2, 1)).permute(0, 2, 1) # B*T, C
+        xc = xc.view(B, T, C)
         return xc
 
 
@@ -51,7 +55,7 @@ class Net(nn.Module):
         left_hand = self.lhand(left_hand)
         right_hand = self.rhand(right_hand)
 
-        ccat = torch.cat([face, pose, left_hand, right_hand], dim=1)
+        ccat = torch.cat([face, pose, left_hand, right_hand], dim=2)
         xc = all_together + ccat
         xc = self.sqz(xc)
 
