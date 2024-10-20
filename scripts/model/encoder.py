@@ -8,6 +8,7 @@ def precompute_freqs(dim, block_size ,theta: float = 10000):
     m = torch.arange(0, block_size)
     freqs = torch.outer(m, freqs)
     freqs = torch.polar(torch.ones_like(freqs), freqs)
+    
     return freqs
 
 
@@ -15,11 +16,9 @@ def apply_rotary_emb(xq: torch.Tensor,
                      xk: torch.Tensor,
                      freqs: torch.Tensor
                      ) -> tuple[torch.Tensor, torch.Tensor]:
-
-    xq_= xq_.view_as_complex(xq.reshape(*xq.shape[:-1], -1, 2))
-    xk_= xk_.view_as_complex(xk.reshape(*xk.shape[:-1], -1, 2))
+    xq_= torch.view_as_complex(xq.reshape(*xq.shape[:-1], -1, 2))
+    xk_= torch.view_as_complex(xk.reshape(*xk.shape[:-1], -1, 2))
     freqs = freqs.unsqueeze(0).unsqueeze(2)
-
     xq_out = torch.view_as_real(xq_ * freqs).flatten(3)
     xk_out = torch.view_as_real(xk_ * freqs).flatten(3)
 
@@ -33,14 +32,15 @@ class MultiHeadAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim ** -0.5
-        self.proj = nn.Linear(dim, dim * 3, bias=False)
+        self.proj = nn.Linear(dim, dim, bias=False)
         self.qkv = nn.Linear(dim, dim * 3, bias=False)
 
     def forward(self, x, freqs):
-        B, T = x.shape
+        B, T, C = x.shape
 
         qkv = self.qkv(x).chunk(3, dim=-1)
         q, k, v = map(lambda t: t.view(B, T, self.num_heads, self.head_dim), qkv)
+
         q, k = apply_rotary_emb(q, k, freqs)
 
         q = q.transpose(1, 2)
@@ -129,6 +129,7 @@ class GLU(nn.Module):
 
 class ConvolutionModule(nn.Module):
     # see https://www.youtube.com/watch?v=vVaRhZXovbw
+
     def __init__(self, in_channels, kernel_size, expansion_factor, dropout_p = 0.1):
         super(ConvolutionModule, self).__init__()
         self.net = nn.Sequential(
@@ -154,7 +155,7 @@ class SqueezeformerBlock(nn.Module):
         self.ln_att = nn.LayerNorm(dim)
         self.ff = FeedForward(dim, expansion_factor= 4)
         self.ln_ff = nn.LayerNorm(dim)
-        self.freqs = precompute_freqs(dim, config.block_size)
+        self.freqs = precompute_freqs(dim//n_heads, config.block_size)
     
     def forward(self, x):
         x = x + self.attn(x, self.freqs)
