@@ -15,7 +15,7 @@ print("Data loaded")
 class config:
     n_dim: int = 208
     n_heads: int = 8
-    block_size: int = 16
+    block_size: int = 130
 
 dataloader = DataLoader(data, batch_size=32, shuffle=False)
 cfg = config()
