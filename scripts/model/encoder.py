@@ -46,7 +46,6 @@ class MultiHeadAttention(nn.Module):
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
-
         att = (q @ k.transpose(-2, -1) * self.scale).softmax(dim=-1)
         out = att @ v
         out = out.transpose(1, 2).contiguous().view(B, T, C)
@@ -132,18 +131,24 @@ class ConvolutionModule(nn.Module):
 
     def __init__(self, in_channels, kernel_size, expansion_factor, dropout_p = 0.1):
         super(ConvolutionModule, self).__init__()
-        self.net = nn.Sequential(
-            PointwiseConv(in_channels, in_channels * expansion_factor, stride=1, padding=0, bias=True),
-            GLU(dim=1),
-            DepthWiseConv(in_channels, in_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
-            nn.BatchNorm1d(in_channels),
-            Swish(),
-            PointwiseConv(in_channels, in_channels, stride=1, padding=0, bias=True),
-            nn.Dropout(p= dropout_p)
-        )
+       
+        self.pointwise = PointwiseConv(in_channels, in_channels * expansion_factor, stride=1, padding=0, bias=True)
+        self.act1 = GLU(dim=1)
+        self.depthwise = DepthWiseConv(in_channels, in_channels, kernel_size, stride=1, padding=(kernel_size-1)//2)
+        self.bn = nn.BatchNorm1d(in_channels)
+        self.act2 = Swish()
+        self.pointwise2 = PointwiseConv(in_channels, in_channels, stride=1, padding=0, bias=True)
+        self.dropout = nn.Dropout(p= dropout_p)
     
     def forward(self, x):
-        return self.net(x)
+        x = self.pointwise(x)
+        x = self.act1(x)
+        x = self.depthwise(x)
+        x = self.bn(x)
+        x = self.act2(x)
+        x = self.pointwise2(x)
+        x = self.dropout(x)
+        return x
 
 
 class SqueezeformerBlock(nn.Module):
@@ -151,17 +156,35 @@ class SqueezeformerBlock(nn.Module):
         super(SqueezeformerBlock, self).__init__()
         dim = config.n_dim
         n_heads = config.n_heads
+        self.freqs = precompute_freqs(dim//n_heads, config.block_size)
         self.attn = MultiHeadAttention(dim, n_heads)
         self.ln_att = nn.LayerNorm(dim)
         self.ff = FeedForward(dim, expansion_factor= 4)
         self.ln_ff = nn.LayerNorm(dim)
-        self.freqs = precompute_freqs(dim//n_heads, config.block_size)
+        self.conv = ConvolutionModule(dim, kernel_size=3, expansion_factor=2)
+        self.ln_conv = nn.LayerNorm(dim)
+        self.ff_2 = FeedForward(dim, expansion_factor= 4)
+        self.ln_ff_2 = nn.LayerNorm(dim)
     
+    #TODO
+    """
+    self.scale_mhsa, self.bias_mhsa = make_scale(encoder_dim)
+        self.scale_ff_mhsa, self.bias_ff_mhsa = make_scale(encoder_dim)
+        self.scale_conv, self.bias_conv = make_scale(encoder_dim)
+        self.scale_ff_conv, self.bias_ff_conv = make_scale(encoder_dim)
+
+    """
     def forward(self, x):
         x = x + self.attn(x, self.freqs)
         x = self.ln_att(x)
         x = x + self.ff(x)
         x = self.ln_ff(x)
+        x = x.permute(0, 2, 1)
+        x = x + self.conv(x)
+        x = x.permute(0, 2, 1)
+        x = self.ln_conv(x)
+        x = x + self.ff_2(x)
+        x = self.ln_ff_2(x)
         return x
 
         
