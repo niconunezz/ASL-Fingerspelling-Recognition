@@ -151,11 +151,22 @@ class ConvolutionModule(nn.Module):
         return x
 
 
+def create_scale(dim):
+    scale = nn.Parameter(torch.ones(1 ,1, dim))
+    bias = nn.Parameter(torch.zeros(1,1, dim))
+    return scale, bias
+
 class SqueezeformerBlock(nn.Module):
     def __init__(self, config):
         super(SqueezeformerBlock, self).__init__()
         dim = config.n_dim
         n_heads = config.n_heads
+
+        self.scale_mhsa, self.bias_mhsa = create_scale(dim)
+        self.scale_ff_mhsa, self.bias_ff_mhsa = create_scale(dim)
+        self.scale_conv, self.bias_conv = create_scale(dim)
+        self.scale_ff_conv, self.bias_ff_conv = create_scale(dim)
+
         self.freqs = precompute_freqs(dim//n_heads, config.block_size)
         self.attn = MultiHeadAttention(dim, n_heads)
         self.ln_att = nn.LayerNorm(dim)
@@ -166,23 +177,24 @@ class SqueezeformerBlock(nn.Module):
         self.ff_2 = FeedForward(dim, expansion_factor= 4)
         self.ln_ff_2 = nn.LayerNorm(dim)
     
-    #TODO
-    """
-    self.scale_mhsa, self.bias_mhsa = make_scale(encoder_dim)
-        self.scale_ff_mhsa, self.bias_ff_mhsa = make_scale(encoder_dim)
-        self.scale_conv, self.bias_conv = make_scale(encoder_dim)
-        self.scale_ff_conv, self.bias_ff_conv = make_scale(encoder_dim)
 
-    """
     def forward(self, x):
+        x = x * self.scale_mhsa + self.bias_mhsa
+
         x = x + self.attn(x, self.freqs)
         x = self.ln_att(x)
+
+        x = x * self.scale_ff_mhsa + self.bias_ff_mhsa
         x = x + self.ff(x)
         x = self.ln_ff(x)
+
+        x = x * self.scale_conv + self.bias_conv
         x = x.permute(0, 2, 1)
         x = x + self.conv(x)
         x = x.permute(0, 2, 1)
         x = self.ln_conv(x)
+
+        x = x * self.scale_ff_conv + self.bias_ff_conv
         x = x + self.ff_2(x)
         x = self.ln_ff_2(x)
         return x
