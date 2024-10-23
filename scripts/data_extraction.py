@@ -66,7 +66,7 @@ class Extractor():
                 array = np.concatenate([np.stack([curr_sqnce.iloc[:130].loc[:, f'{dim}_{kpoint}_0' : f"{dim}_{kpoint}_{r}"].to_numpy()
                                         for dim in ['x','y','z']], axis=2)
                                         for kpoint, r in zip(kpoints, ranges)], axis=1)
-                assert array.shape == (130, 130, 3), "something wrong, array shape: {array.shape}"
+                assert array.shape == (130, 130, 3), f"something wrong, array shape: {array.shape}"     
 
                 tokenized_phrase = self.tok.encode(self.sequence_to_phrase[sequence], self.merges)
                 if not isinstance(tokenized_phrase[0], int):
@@ -80,7 +80,10 @@ class Extractor():
                 labels.append(padded)
 
                 
-            np.savez_compressed(f"data/extractedf/{file}.npz", np.array(examples), np.array(labels))
+
+                
+            np.savez_compressed(f"data/extracted/{file}.npz", np.array(examples), np.array(labels))
+        
     
 
 if __name__ == "__main__":
