@@ -14,6 +14,7 @@ class CustomDataset(Dataset):
         for file in self.files:
             f = np.load(f"data/extracted/{file}")
             x = torch.from_numpy(f['arr_0'])
+            x = self.fill_nans(x)
             
             try:
                 y = torch.tensor(f['arr_1'])
@@ -22,7 +23,11 @@ class CustomDataset(Dataset):
             self.data.extend(torch.unbind(x, dim=0))
             self.labels.extend(torch.unbind(y,dim=0))
 
-       
+    
+    def fill_nans(self,x):
+        x[torch.isnan(x)] = 0
+        return x
+
     def __len__(self) -> int:
         return len(self.data)
 
