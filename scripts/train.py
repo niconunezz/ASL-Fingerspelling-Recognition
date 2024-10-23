@@ -26,6 +26,5 @@ cfg = config()
 model = Net(cfg)
     
 for (x, y) in (dataloader):
-    
-    model(x)
+    logits, loss = model(x)
     break
