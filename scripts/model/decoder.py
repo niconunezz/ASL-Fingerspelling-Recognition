@@ -128,7 +128,7 @@ class Decoder(nn.Module):
         for _ in range(config.n_layer):
             self.layers.append(Block(config))
         self.ln_f = nn.LayerNorm(config.n_dim) # final layer norm
-        self.lm_head = nn.Linear(config.n_dim, config.vocab_size)
+        self.lm_head = nn.Linear(config.n_dim * config.block_size, 31*config.vocab_size)
         self.freqs_cis = precompute_freqs_cis(config.n_dim//config.n_heads , config.block_size)
         # better init, not covered in the original GPT video, but important, will cover in followup video
         self.apply(self._init_weights)
@@ -154,8 +154,9 @@ class Decoder(nn.Module):
             x = layer(x, self.freqs_cis)
         
         x = self.ln_f(x) # (B,T,C)
-        logits = self.lm_head(x) # (B,T,vocab_size)
-
+        x = x.view(B, T*C)
+        logits = self.lm_head(x) # (B,31*vocab_size)
+        logits = logits.view(B, 31, -1)
         if targets is None:
             loss = None
         else:
