@@ -44,6 +44,7 @@ def apply_rotary_emb(xq: torch.Tensor,
                      xk: torch.Tensor,
                      freqs: torch.Tensor
                      ) -> tuple[torch.Tensor, torch.Tensor]:
+    
     xq_= torch.view_as_complex(xq.reshape(*xq.shape[:-1], -1, 2))
     xk_= torch.view_as_complex(xk.reshape(*xk.shape[:-1], -1, 2))
     freqs = freqs.unsqueeze(0).unsqueeze(2)
@@ -196,6 +197,7 @@ class SqueezeformerBlock(nn.Module):
         self.scale_ff_conv, self.bias_ff_conv = create_scale(dim)
 
         self.freqs = precompute_freqs(dim//n_heads, config.block_size)
+        self.freqs = self.freqs.to(config.device)
         self.attn = MultiHeadAttention(dim, n_heads)
         self.ln_att = nn.LayerNorm(dim)
         self.ff = FeedForward(dim, expansion_factor= 4)
