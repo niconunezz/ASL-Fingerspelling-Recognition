@@ -43,7 +43,7 @@ class Net(nn.Module):
         self.encoder = nn.Sequential(*[SqueezeformerBlock(config) for _ in range(config.encoder_layers)])
         self.decoder = Decoder(config)
 
-    def forward(self, data):
+    def forward(self, data, targets):
         right_hand = data[:, :, :20, :]
         left_hand = data[:, :, 20:40, :]
         face = data[:, :, 40:115, :]
@@ -59,6 +59,6 @@ class Net(nn.Module):
         ccat = torch.cat([face, pose, left_hand, right_hand], dim=2)
         xc = all_together + ccat
         xc = self.encoder(xc)
-        xc = self.decoder(xc)
+        xc = self.decoder(xc, targets)
 
         return xc
