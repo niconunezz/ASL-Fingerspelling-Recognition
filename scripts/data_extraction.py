@@ -6,7 +6,7 @@ from tokenizer import RegexTokenizer
 
 class Extractor():
 
-    def __init__(self):
+    def __init__(self, merges = False):
         self.train_df = train_df = pd.read_csv("data/merged.csv")
 
         self.sequence_to_phrase = {sequence: phrase for sequence, phrase in zip(train_df.sequence_id, train_df.phrase)}
@@ -14,14 +14,19 @@ class Extractor():
         self.unique_files = unique_files = train_df.file_id.unique()
         self.file_to_sequences = {file : train_df.loc[train_df['file_id'] == file].sequence_id for file in unique_files}
 
-
         self.tok = RegexTokenizer()
-        self.merges, self.vocab = self.init_tokenizer(vocab_size=500)
+        if not merges:
+            self.merges, self.vocab = self.init_tokenizer(vocab_size=500)
+            self.vocab_size = len(self.vocab) + 1 # +1 for padding token
+        else:
+            self.merges= pickle.load(open("data/extractor_merges.pkl", "rb"))
+            self.vocab = pickle.load(open("data/extractor.pkl", "rb"))
+            self.vocab_size = len(self.vocab) + 1 # +1 for padding token
         print("Tokenizer initialized")
-        self.vocab_size = len(self.vocab) + 1 # +1 for padding token
-        
-
-    def init_tokenizer(self, vocab_size: int) -> tuple[dict, dict]:
+    def init_tokenizer(
+            self, 
+            vocab_size: int
+            ) -> tuple[dict, dict]:
         
         phrases = self.sequence_to_phrase.values()
         text = ' '.join(phrases)
@@ -34,10 +39,17 @@ class Extractor():
 
         with open("data/extractor.pkl", "wb") as f:
             pickle.dump(vocab, f)
+        
+        with open("data/extractor_merges.pkl", "wb") as f:
+            pickle.dump(merges, f)
 
         return merges, vocab
     
-    def add_padding(self, array: list, max_len: int) -> np.ndarray:
+    def add_padding(self, 
+                    array: list, 
+                    max_len: int
+                    ) -> np.ndarray:
+        
         if not isinstance(array, list):
             array = [array]
         array = np.array(array)
@@ -67,17 +79,20 @@ class Extractor():
                                         for dim in ['x','y','z']], axis=2)
                                         for kpoint, r in zip(kpoints, ranges)], axis=1)
                 assert array.shape == (130, 130, 3), f"something wrong, array shape: {array.shape}"     
+                examples.append(array)
 
                 tokenized_phrase = self.tok.encode(self.sequence_to_phrase[sequence], self.merges)
-                if not isinstance(tokenized_phrase[0], int):
-                    continue
 
-                examples.append(array)
 
                 
                 padded = self.add_padding(tokenized_phrase, max_len=31)
                 assert padded.shape == (31,), f"something wrong, padded shape: {padded.shape}"
-                labels.append(padded)
+                try:
+                    labels.append(padded.astype(int))
+                except:
+                    print(f"Some error occured with sequence: {sequence}")
+                    print(f"original phrase: {self.sequence_to_phrase[sequence]}")
+                    print(f"tokenized phrase: {tokenized_phrase}")
 
                 
 
@@ -87,6 +102,6 @@ class Extractor():
     
 
 if __name__ == "__main__":
-    extractor = Extractor()
+    extractor = Extractor(merges=True)
     extractor.extract()
     print("done")
