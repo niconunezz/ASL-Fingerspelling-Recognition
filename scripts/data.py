@@ -1,8 +1,9 @@
-import pandas as pd
-from torch.utils.data import DataLoader, Dataset
 import os
-import numpy as np
 import torch
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+from torch.utils.data import DataLoader, Dataset
 
 class CustomDataset(Dataset):
     def __init__(self, validation = False) -> None:
@@ -16,14 +17,16 @@ class CustomDataset(Dataset):
         self.labels = []
 
         counter = 0
-        for file in self.files:
+        for file in tqdm(self.files):
             f = np.load(f"{path}/{file}")
             x = torch.from_numpy(f['arr_0'])
             x = self.fill_nans(x)
             
             try:
                 y = torch.tensor(f['arr_1'])
-            except TypeError:
+                
+            except Exception as e:
+                print(f"Error in file {file} : {e}")                
                 counter += 1
                 continue
             self.data.extend(torch.unbind(x, dim=0))
