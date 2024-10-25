@@ -90,11 +90,9 @@ def apply_rotary_emb(
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
     xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
 
-    # print(f" freqs_cis before reshaPE: {freqs_cis.shape}")
+    
     freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
 
-    # print(f"freqs_cis: {freqs_cis.shape}")
-    # print(f"xq_: {xq_.shape}")
 
     xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
     xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
@@ -161,9 +159,9 @@ class Decoder(nn.Module):
             loss = None
         else:
             B, T, C = logits.shape
-            logits = logits.view(B*T, C)
+            
             targets = targets.view(B*T)
-            loss = F.cross_entropy(logits, targets)
+            loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=501)
 
         return logits, loss
 
