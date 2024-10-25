@@ -1,12 +1,12 @@
-from model.model import Net
-from data import CustomDataset
-
 import torch
+import pickle
 import torch.nn as nn
+from tqdm import tqdm
+from model.model import Net
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from data import CustomDataset
 from dataclasses import dataclass
-
+from torch.utils.data import DataLoader
 data = CustomDataset()
 print("Data loaded")
 
@@ -20,8 +20,10 @@ class config:
     n_layer: int = 1
     dropout: float = 0.1
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    val_files: int = 3
+    epochs: int = 1
 
-dataloader = DataLoader(data, batch_size=32, shuffle=False)
+dataloader = DataLoader(data, batch_size=64, shuffle=False)
 cfg = config()
 print(f"Device: {cfg.device}")
 
@@ -35,20 +37,29 @@ optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 print(f"Data loader examples: {len(dataloader)}")
 
-def validate(model):
+def validate(model, config):
     data = CustomDataset(validation=True)
-    dataloader = DataLoader(data, batch_size=1, shuffle=False)
+    dataloader = DataLoader(data, batch_size= config.val_files, shuffle=False)
+    vocab = pickle.load(open("data/extractor.pkl", "rb"))
     model.eval()
     for x, y in dataloader:
         x, y = x.to(cfg.device), y.to(cfg.device)
         logits, loss = model(x, y)
         print(f"Validation loss: {loss.item()}")
+
+        print(f"Sentence: {''.join([vocab[token.item()].decode('utf-8') for token in y[1]])}")
+
+        print(f"Logits: {logits.shape}")
+        print("".join([vocab[i.item()].decode('utf-8', errors = 'replace') for i in logits[0].argmax(dim=-1)]))
+        logits = logits[0].argmax(dim=-1)
+
         break
+        
 
 
 
-for epoch in range(1):
-    for i, (x, y) in enumerate(dataloader):
+for epoch in range(config.epochs):
+    for i, (x, y) in (enumerate(dataloader)):
         x, y = x.to(cfg.device), y.to(cfg.device)
         logits, loss = model(x, y)
         
@@ -58,6 +69,8 @@ for epoch in range(1):
 
         if i % 100 == 0:
             print(f"Iteration {i}, loss: {loss.item()}")
+
+       
     
 
-validate(model)
+validate(model, cfg)
