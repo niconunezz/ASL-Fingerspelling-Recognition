@@ -95,30 +95,31 @@ class RegexTokenizer:
         
         return n_ids
     
-    def encode(self, text, merges):
+    def encode(self, text, merges , verbose = False):
 
-        ids = text.encode("utf-8")
+        ids = list(text.encode("utf-8"))
 
         while len(ids) > 1:
-
             counts = self.stats(ids)
+            if verbose:
+                print(counts)
             pair = min(counts, key = lambda k: merges.get(k, float("inf")))
 
             if pair not in merges:
                 break
+            
                 
             ids = self.merge_for_encoding(ids, pair, merges[pair])
         
         return ids
     
-
-
+    
 # a = RegexTokenizer()
 # with open("scripts/tests/taylorswift.txt", "r") as f:
 #     text = f.read()
 
 # print(len(text))
 
-# tokens, merges = a.train(text, 275, verbose = True)
+# tokens, merges = a.train(text, 257, verbose = True)
 
-# print((a.encode("I love you so much merry christmas", merges)))
+# print((a.encode("Hello from the other siiiiiiiiiiide", merges)))
