@@ -1,3 +1,4 @@
+import os
 import pickle
 import numpy as np
 import pandas as pd
@@ -23,6 +24,7 @@ class Extractor():
             self.vocab = pickle.load(open("data/extractor.pkl", "rb"))
             self.vocab_size = len(self.vocab) + 1 # +1 for padding token
         print("Tokenizer initialized")
+        
     def init_tokenizer(
             self, 
             vocab_size: int
@@ -45,59 +47,38 @@ class Extractor():
 
         return merges, vocab
     
-    def add_padding(self, 
-                    array: list, 
-                    max_len: int
-                    ) -> np.ndarray:
-        
-        if not isinstance(array, list):
-            array = [array]
-        array = np.array(array)
-        
-        if array.shape[0] >= max_len:
-            return array[:max_len]
-        
-        else:
-            return np.pad(array, ((0, max_len - array.shape[0])), mode='constant', constant_values = self.vocab_size)
+    
 
     def extract(self):
         for file in tqdm(self.unique_files):
             f = pd.read_parquet(f"data/train_landmarks/{file}.parquet")
             
-            examples = []
-            labels = []
             for sequence in (self.file_to_sequences[file]):
                 
                 curr_sqnce = f.loc[f.index == sequence]
-                if curr_sqnce.shape[0] == 0 or curr_sqnce.shape[0] < 130:
-                    continue
+                
                 
                 kpoints = ['right_hand', 'left_hand', 'face', 'pose']
                 ranges = [20, 20, 75, 11]
 
-                array = np.concatenate([np.stack([curr_sqnce.iloc[:130].loc[:, f'{dim}_{kpoint}_0' : f"{dim}_{kpoint}_{r}"].to_numpy()
+                array = np.concatenate([np.stack([curr_sqnce.loc[:, f'{dim}_{kpoint}_0' : f"{dim}_{kpoint}_{r}"].to_numpy()
                                         for dim in ['x','y','z']], axis=2)
                                         for kpoint, r in zip(kpoints, ranges)], axis=1)
-                assert array.shape == (130, 130, 3), f"something wrong, array shape: {array.shape}"     
-                examples.append(array)
-
-                tokenized_phrase = self.tok.encode(self.sequence_to_phrase[sequence], self.merges)
-
-
                 
-                padded = self.add_padding(tokenized_phrase, max_len=31)
-                assert padded.shape == (31,), f"something wrong, padded shape: {padded.shape}"
+                assert array.shape[1] == 130 and array.shape[2] == 3, f"Shape mismatch: {array.shape}"
+
+                label = np.array(self.tok.encode(self.sequence_to_phrase[sequence], self.merges))
+
                 try:
-                    labels.append(padded.astype(int))
-                except:
+                    label = label.astype(int)
+                except Exception as e:
+                    print(f" Exception: {e}")
                     print(f"Some error occured with sequence: {sequence}")
                     print(f"original phrase: {self.sequence_to_phrase[sequence]}")
-                    print(f"tokenized phrase: {tokenized_phrase}")
+                    print(f"tokenized phrase: {label}")
 
-                
-
-                
-            np.savez_compressed(f"data/extracted/{file}.npz", np.array(examples), np.array(labels))
+                os.makedirs(f"data/tensors/{file}", exist_ok=True)
+                np.savez_compressed(f"data/tensors/{file}/{sequence}.npy", np.array(array), np.array(label))
         
     
 
