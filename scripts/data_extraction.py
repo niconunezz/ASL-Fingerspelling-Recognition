@@ -66,7 +66,8 @@ class Extractor():
                                         for kpoint, r in zip(kpoints, ranges)], axis=1)
                 
                 assert array.shape[1] == 130 and array.shape[2] == 3, f"Shape mismatch: {array.shape}"
-
+                
+                #TODO: Must add start and end token
                 label = np.array(self.tok.encode(self.sequence_to_phrase[sequence], self.merges))
 
                 try:
@@ -78,7 +79,7 @@ class Extractor():
                     print(f"tokenized phrase: {label}")
 
                 os.makedirs(f"data/tensors/{file}", exist_ok=True)
-                np.savez_compressed(f"data/tensors/{file}/{sequence}.npy", np.array(array), np.array(label))
+                np.savez_compressed(f"data/tensors/{file}/{sequence}", np.array(array), np.array(label))
         
     
 
