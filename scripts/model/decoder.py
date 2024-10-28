@@ -126,7 +126,7 @@ class Decoder(nn.Module):
         for _ in range(config.n_layer):
             self.layers.append(Block(config))
         self.ln_f = nn.LayerNorm(config.n_dim) # final layer norm
-        self.lm_head = nn.Linear(config.n_dim * config.block_size, 31*config.vocab_size)
+        self.lm_head = nn.Linear(config.n_dim * config.block_size, 31*(config.vocab_size+1))
         self.freqs_cis = precompute_freqs_cis(config.n_dim//config.n_heads , config.block_size)
         # better init, not covered in the original GPT video, but important, will cover in followup video
         self.apply(self._init_weights)
@@ -161,6 +161,8 @@ class Decoder(nn.Module):
             B, T, C = logits.shape
             
             targets = targets.view(B*T)
+            print(f"Targets: {targets.min()}, {targets.max()}")
+            print(f"Logits: {logits.shape}")
             loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=501)
 
         return logits, loss
