@@ -7,27 +7,32 @@ import torch.optim as optim
 from data import CustomDataset
 from dataclasses import dataclass
 from torch.utils.data import DataLoader
-data = CustomDataset()
-print("Data loaded")
 
 @dataclass
 class config:
     n_dim: int = 208
-    n_heads: int = 8
-    block_size: int = 130
-    encoder_layers: int = 1
+    n_heads: int = 2
+    block_size: int = 384
+    max_seq_len: int = 31
+    encoder_layers: int = 2
     vocab_size: int = 502
-    n_layer: int = 1
+    n_layer: int = 3
     dropout: float = 0.1
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     val_files: int = 3
-    epochs: int = 1
+    epochs: int = 2
 
-dataloader = DataLoader(data, batch_size=64, shuffle=False)
+
 cfg = config()
 print(f"Device: {cfg.device}")
 
+data = CustomDataset(cfg)
+print("Data loaded")
 
+x, y = data[0]
+print(f"X: {x.shape}, Y: {y.shape}")
+
+dataloader = DataLoader(data, batch_size=32, shuffle=True)
 model = Net(cfg)
 model.to(cfg.device)
 
@@ -56,13 +61,11 @@ def validate(model, config):
         break
         
 
-
-
 for epoch in range(config.epochs):
     for i, (x, y) in (enumerate(dataloader)):
         x, y = x.to(cfg.device), y.to(cfg.device)
-        logits, loss = model(x, y)
         
+        logits, loss = model(x, y)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
