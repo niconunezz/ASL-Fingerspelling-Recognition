@@ -16,24 +16,75 @@ class FeatureExtraction(nn.Module):
         self.stem_linear = nn.Linear(in_channels, out_dim, bias=False)
         self.stem_bn = nn.BatchNorm1d(out_dim, momentum=0.95)
 
-    def forward(self, data):
+    def forward(self, data, mask, verbose = False):
+        import time
+        t0 = time.time()
         xc = data.permute(0, 3, 1, 2) # B, C, H, W
-        xc = self.conv_stem(xc) # B, 32, H, W//2
-        xc = self.bn_conv(xc) # B, 32, H, W//2
-        xc = xc.reshape(*data.shape[:2], -1) # B, H, 32 * W//2
-        xc = self.stem_linear(xc) # B, out_dim
+        t1 = time.time()
+        if verbose:
+            print(f"Permuting data took {(t1-t0)*1000:.2f} Mseconds")
 
+        t0 = time.time()
+        xc = self.conv_stem(xc) # B, 32, H, W//2
+        t1 = time.time()
+        if verbose:
+            print(f"Conv stem took {(t1-t0)*1000:.2f} Mseconds")
+
+        t0 = time.time()
+        xc = self.bn_conv(xc) # B, 32, H, W//2
+        t1 = time.time()
+        if verbose:
+            print(f"Batch norm took {(t1-t0)*1000:.2f} Mseconds")
+
+        t0 = time.time()
+        xc = xc.reshape(*data.shape[:2], -1) # B, H, 32 * W//2
+        t1 = time.time()
+        if verbose:
+            print(f"Reshaping took {(t1-t0)*1000:.2f} Mseconds")
+
+        t0 = time.time()
+        xc = self.stem_linear(xc) # B, out_dim
+        t1 = time.time()
+        if verbose:
+            print(f"Stem linear took {(t1-t0)*1000:.2f} Mseconds")
+
+        t0 = time.time()
         B, T, C = xc.shape
-        xc = xc.view(1, -1, C)
-        xc = self.stem_bn(xc.permute(0, 2, 1)).permute(0, 2, 1) # B*T, C
+        xc = xc.view(-1, C)
+        t1 = time.time()
+        if verbose:
+            print(f"Reshaping for BN took {(t1-t0)*1000:.2f} Mseconds")
+
+        t0 = time.time()
+        x_bn = xc[(mask.view(-1) == 1)].unsqueeze(0)
+        x_bn = self.stem_bn(x_bn.permute(0, 2, 1)).permute(0, 2, 1) # B*T, C
+        xc[mask.view(-1) == 1] = x_bn[0]
+        t1 = time.time()
+        if verbose:
+            print(f"Batch norm for non-padded tokens took {(t1-t0)*1000:.2f} Mseconds")
+
+        t0 = time.time()
+        a = ~mask.bool().unsqueeze(-1)
+        t1 = time.time()
+        if verbose:
+            print(f"Masking took {(t1-t0)*1000:.2f} Mseconds")
+        t0 = time.time()
         xc = xc.view(B, T, C)
+        xc = xc.masked_fill(a, 0.0)
+        t1 = time.time()
+        if verbose:
+            print(f"Final reshaping and masking took {(t1-t0)*1000:.2f} Mseconds")
+
+        import sys
+        # sys.exit(0)
+        
         return xc
 
 
 class Net(nn.Module):
     def __init__(self, config):
         super(Net, self).__init__()
-        self.n_heads = n_heads = config.n_heads
+        self.n_heads = config.n_heads
         self.feature_extraction = FeatureExtraction(out_dim = 208)
         self.face_fe = FeatureExtraction(out_dim = 52, height=75)
         self.pose_fe = FeatureExtraction(out_dim = 52, height=15)
@@ -43,22 +94,47 @@ class Net(nn.Module):
         self.encoder = nn.Sequential(*[SqueezeformerBlock(config) for _ in range(config.encoder_layers)])
         self.decoder = Decoder(config)
 
-    def forward(self, data, targets):
+    def forward(self, data, mask, targets, verbose = False):
+
+        import time 
+
+        t0 = time.time()
         right_hand = data[:, :, :20, :]
         left_hand = data[:, :, 20:40, :]
         face = data[:, :, 40:115, :]
         pose = data[:, :, 115:, :]
+        t1 = time.time()
+        if verbose:
+            print(f"Splitting data took {(t1-t0)*1000:.2f} Mseconds")
 
+        t0 = time.time()
+        all_together = self.feature_extraction(data, mask)
+        t1 = time.time()
+        if verbose:
+            print(f"Feature extraction took {(t1-t0)*1000:.2f} Mseconds")
 
-        all_together = self.feature_extraction(data)
-        face = self.face_fe(face)
-        pose = self.pose_fe(pose)
-        left_hand = self.lhand(left_hand)
-        right_hand = self.rhand(right_hand)
+        t0 = time.time()
+        face = self.face_fe(face, mask)
+        pose = self.pose_fe(pose, mask)
+        left_hand = self.lhand(left_hand, mask)
+        right_hand = self.rhand(right_hand, mask)
+        t1 = time.time()
+        if verbose:
+            print(f"Feature extraction of all took {(t1-t0)*1000} Mseconds")
 
         ccat = torch.cat([face, pose, left_hand, right_hand], dim=2)
-        xc = all_together + ccat
-        xc = self.encoder(xc)
-        xc = self.decoder(xc, targets)
 
+        xc = all_together + ccat
+        t0 = time.time()
+        xc = self.encoder(xc)
+        
+        t1 = time.time()
+        if verbose:
+            print(f"Encoder took {(t1-t0)*1000} Mseconds")
+        t0 = time.time()
+
+        xc = self.decoder(xc, targets)
+        t1 = time.time()
+        if verbose:
+            print(f"Decoder took {(t1-t0)*1000} Mseconds")
         return xc
