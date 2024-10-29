@@ -35,18 +35,19 @@ def padd_or_interpolate(x, max_len, vocab_size: int = 502):
         if x.shape[0] > max_len:
             matrix = F.interpolate(x.permute(1,2,0), max_len).permute(2,0,1)
             assert matrix.shape[0] == max_len
-
-            return matrix, torch.ones((x.shape[0], 1, 1))
+            mask = torch.ones_like(matrix[:, 0, 0])
+            return matrix, mask
         
-        if x.shape[0] < max_len:
+        else:
             diff = max_len - x.shape[0]
             pad = torch.full((diff, x.shape[1], x.shape[2]), vocab_size)
             matrix = torch.cat((x, pad), dim=0)
             assert matrix.shape[0] == max_len
 
-            mask = torch.ones((x.shape[0], 1, 1))
-            mask = torch.cat((mask, torch.zeros((pad.shape[0], 1, 1))))
-            return matrix, mask 
+            mask = torch.ones_like(x[:, 0, 0])
+            
+            mask = torch.cat([mask, pad[:, 0, 0]* 0])
+            return matrix, mask
 
             
 
@@ -85,7 +86,7 @@ class CustomDataset(Dataset):
             y = padd_sequence(y, self.config.max_seq_len)
 
 
-        return x, mask, y
+        return {"data": x, "mask": mask, "target": y}
 
 
     def load_seq(self, file, seq):
