@@ -1,3 +1,4 @@
+import sys
 import torch
 import pickle
 import torch.nn as nn
@@ -12,7 +13,7 @@ from torch.utils.data import DataLoader
 class config:
     n_dim: int = 208
     n_heads: int = 2
-    block_size: int = 384
+    block_size: int = 128
     max_seq_len: int = 31
     encoder_layers: int = 2
     vocab_size: int = 502
@@ -22,21 +23,18 @@ class config:
     val_files: int = 3
     epochs: int = 2
 
-
 cfg = config()
 print(f"Device: {cfg.device}")
 
 data = CustomDataset(cfg)
 print("Data loaded")
+print(f"Data has {len(data)} examples")
 
-x, y = data[0]
-print(f"X: {x.shape}, Y: {y.shape}")
-
-dataloader = DataLoader(data, batch_size=32, shuffle=True)
+dataloader = DataLoader(data, batch_size=32, shuffle=False)
 model = Net(cfg)
 model.to(cfg.device)
 
-print(f"Model has {sum(p.numel() for p in model.parameters())/1e6}M parameters")
+print(f"Model has {sum(p.numel() for p in model.parameters())/1e6} M parameters")
 
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
@@ -47,9 +45,10 @@ def validate(model, config):
     dataloader = DataLoader(data, batch_size= config.val_files, shuffle=False)
     vocab = pickle.load(open("data/extractor.pkl", "rb"))
     model.eval()
-    for x, y in dataloader:
+    for el in dataloader:
+        x, mask, y = el
         x, y = x.to(cfg.device), y.to(cfg.device)
-        logits, loss = model(x, y)
+        logits, loss = model(x, mask, y)
         print(f"Validation loss: {loss.item()}")
 
         print(f"Sentence: {''.join([vocab[token.item()].decode('utf-8') for token in y[1]])}")
@@ -62,15 +61,17 @@ def validate(model, config):
         
 
 for epoch in range(config.epochs):
-    for i, (x, y) in (enumerate(dataloader)):
+    for i, batch in (enumerate(dataloader)):
+        x, mask, y = batch['data'], batch['mask'], batch['target']
         x, y = x.to(cfg.device), y.to(cfg.device)
-        
-        logits, loss = model(x, y)
+        mask = mask.to(cfg.device)
+
+        logits, loss = model(x, mask, y)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-        if i % 100 == 0:
+        # sys.exit(0)
+        if i % 10 == 0:
             print(f"Iteration {i}, loss: {loss.item()}")
 
        
