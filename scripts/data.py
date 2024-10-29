@@ -13,14 +13,15 @@ class Preprocessing(nn.Module):
         super(Preprocessing, self).__init__()
 
     def forward(self, x):
-        x = self.normalize(x)
         x = self.fill_nans(x)
+        x = self.normalize(x)
+        # print(f" x mean {x.mean()}, x std {x.std()}")
         return x
     
     def normalize(self, x):
         nonan = x[~torch.isnan(x)]
-        x = (x - nonan.mean(0).reshape(1,1,-1))
-        x = x/nonan.std(0, unbiased = False).reshape(1,1,-1)
+        x = (x - nonan.mean(0))
+        x = x/nonan.std(0, unbiased = False)
         return x
         
     
