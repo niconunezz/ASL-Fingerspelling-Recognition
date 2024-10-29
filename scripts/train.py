@@ -1,4 +1,5 @@
 import sys
+import time
 import torch
 import pickle
 import torch.nn as nn
@@ -62,6 +63,7 @@ def validate(model, config):
 
 for epoch in range(config.epochs):
     for i, batch in (enumerate(dataloader)):
+        t0 = time.time()
         x, mask, y = batch['data'], batch['mask'], batch['target']
         x, y = x.to(cfg.device), y.to(cfg.device)
         mask = mask.to(cfg.device)
@@ -69,10 +71,20 @@ for epoch in range(config.epochs):
         logits, loss = model(x, mask, y)
         optimizer.zero_grad()
         loss.backward()
+        for name, param in model.named_parameters():
+            if param.grad is not None and param.grad.norm() > 1.0:
+                print(f"Layer: {name}, grad norm: {param.grad.norm()}")
+        sys.exit(0)
+        norm = nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            
         optimizer.step()
-        # sys.exit(0)
+        
+        torch.cuda.synchronize()
+        t1 = time.time()
         if i % 10 == 0:
-            print(f"Iteration {i}, loss: {loss.item()}")
+            print(f"Epoch {epoch}| iteration {i}| loss: {loss.item()}| norm: {norm}| time: {(t1-t0)*1000:.2f} ms")
+            
+
 
        
     
