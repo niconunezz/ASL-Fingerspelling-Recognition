@@ -15,7 +15,6 @@ class Preprocessing(nn.Module):
     def forward(self, x):
         x = self.fill_nans(x)
         x = self.normalize(x)
-        # print(f" x mean {x.mean()}, x std {x.std()}")
         return x
     
     def normalize(self, x):
@@ -60,11 +59,19 @@ def padd_sequence(x, max_len, vocab_size: int = 502):
 
 
 class CustomDataset(Dataset):
-    def __init__(self, cfg ,mode = "train") -> None:
+    def __init__(self, cfg , mode = "train") -> None:
+        
         
         self.config = cfg
         self.path = "data/tensors"
-        self.df = pd.read_csv("data/train.csv")
+
+        self.df = df = pd.read_csv("data/train.csv")
+        if cfg.max_ex:
+            self.df = df = df.iloc[:cfg.max_ex]
+        if mode == "train":
+            self.df = df = df.iloc[:len(df)*4//5]
+        if mode == "val":
+            self.df = df = df.iloc[len(df)*4//5:]
         self.processor = Preprocessing()
         self.mode = mode
 
@@ -82,7 +89,7 @@ class CustomDataset(Dataset):
         
         x = self.processor(x)
         
-        if self.mode == "train":
+        if self.mode == "train" or self.mode == "val":
             x, mask = padd_or_interpolate(x, self.config.block_size)
             y = padd_sequence(y, self.config.max_seq_len)
 
