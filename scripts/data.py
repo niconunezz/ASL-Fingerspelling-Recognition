@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 import numpy as np
 import pandas as pd
@@ -55,7 +56,8 @@ def padd_or_interpolate(x, max_len, vocab_size: int = 502):
 def padd_sequence(x, max_len, vocab_size: int = 502):
     return np.pad(x, ((0, max_len - x.shape[0])), mode='constant', constant_values = vocab_size)
             
-        
+
+
 
 
 class CustomDataset(Dataset):
@@ -64,6 +66,7 @@ class CustomDataset(Dataset):
         
         self.config = cfg
         self.path = "data/tensors"
+        self.tokenizer = self.setup_tokenizer()
 
         self.df = df = pd.read_csv("data/train.csv")
         if cfg.max_ex:
@@ -81,13 +84,13 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
         
         row = self.df.iloc[idx]
-        file_id, sequence_id, _ = row[['file_id', 'sequence_id', 'phrase']]
+        file_id, sequence_id, phrase = row[['file_id', 'sequence_id', 'phrase']]
         data = self.load_seq(file_id, sequence_id)
-        x, y = data['arr_0'], data['arr_1']
+        x = data['arr_0']
         x = torch.from_numpy(x)
-        y = torch.from_numpy(y)
-        
         x = self.processor(x)
+        
+        y = np.array([self.tokenizer[char] for char in list(phrase)])
         
         if self.mode == "train" or self.mode == "val":
             x, mask = padd_or_interpolate(x, self.config.block_size)
@@ -100,3 +103,11 @@ class CustomDataset(Dataset):
     def load_seq(self, file, seq):
         path = f"{self.path}/{file}/{seq}.npy.npz"
         return np.load(path)
+
+
+    def setup_tokenizer(self):
+        self.tokenizer = json.load(open("data/supplemental_landmarks/character_to_prediction_index.json"))
+        self.tokenizer["<sos>"] = 59
+        self.tokenizer["<eos>"] = 60
+        self.tokenizer["<pad>"] = 61
+        return self.tokenizer 
