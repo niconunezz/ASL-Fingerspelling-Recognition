@@ -32,16 +32,16 @@ class Preprocessing(nn.Module):
         
 
 
-def padd_or_interpolate(x, max_len, vocab_size: int = 502):
+def padd_or_interpolate(x, max_len, pad_token: int = 61):
         if x.shape[0] > max_len:
             matrix = F.interpolate(x.permute(1,2,0), max_len).permute(2,0,1)
-            assert matrix.shape[0] == max_len
             mask = torch.ones_like(matrix[:, 0, 0])
+            assert matrix.shape[0] == max_len
             return matrix, mask
         
         else:
             diff = max_len - x.shape[0]
-            pad = torch.full((diff, x.shape[1], x.shape[2]), vocab_size)
+            pad = torch.full((diff, x.shape[1], x.shape[2]), pad_token)
             matrix = torch.cat((x, pad), dim=0)
             assert matrix.shape[0] == max_len
 
@@ -53,8 +53,8 @@ def padd_or_interpolate(x, max_len, vocab_size: int = 502):
             
 
 
-def padd_sequence(x, max_len, vocab_size: int = 502):
-    return np.pad(x, ((0, max_len - x.shape[0])), mode='constant', constant_values = vocab_size)
+def padd_sequence(x, max_len, pad_token: int = 61):
+    return np.pad(x, ((0, max_len - x.shape[0])), mode='constant', constant_values = pad_token)
             
 
 
