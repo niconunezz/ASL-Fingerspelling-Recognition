@@ -2,7 +2,7 @@ import sys
 import time
 import math
 import torch
-import pickle
+import json
 import torch.nn as nn
 from tqdm import tqdm
 from model.model import Net
@@ -11,6 +11,7 @@ from data import CustomDataset
 import torch.nn.functional as F
 from dataclasses import dataclass
 from torch.utils.data import DataLoader
+
 @dataclass
 class config:
     n_dim: int = 208
@@ -18,7 +19,7 @@ class config:
     block_size: int = 16
     max_seq_len: int = 31
     encoder_layers: int = 5
-    vocab_size: int = 502
+    vocab_size: int = 62
     n_layer: int = 6
     dropout: float = 0.1
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
@@ -39,7 +40,7 @@ dataloader = DataLoader(data, batch_size=512, shuffle=False)
 model = Net(cfg)
 model.to(cfg.device)
 
-print(f"Model has {sum(p.numel() for p in model.parameters())/1e6} M parameters")
+print(f"Model has {(sum(p.numel() for p in model.parameters())/1e6):.2f} M parameters")
 
 mx_lr = 1e-3
 mn_lr = 1e-5
@@ -90,23 +91,29 @@ def validate(model, config):
     dataloader = DataLoader(data, batch_size= config.val_files, shuffle=False)
     print(f"Validation data has {len(data)} examples")
     print(f"Validation data loader has {len(dataloader)} examples")
-    vocab = pickle.load(open("data/extractor.pkl", "rb"))
+    
+    vocab = json.load(open("data/supplemental_landmarks/prediction_index_to_character.json"))
+    vocab['59'] = '<sos>'
+    vocab['60'] = '<eos>'
+    vocab['61'] = '<pad>'
     model.eval()
+    
     for batch in dataloader:
         x, mask, y = batch['data'], batch['mask'], batch['target']
         
         x, y = x.to(cfg.device), y.to(cfg.device)
         mask = mask.to(cfg.device)
+        
         logits, loss = model(x, mask, y)
         print(f"Validation loss: {loss.item()}")
 
         print(f"Logits: {logits.shape}")
         probs = F.softmax(logits, dim = -1)
         for i in range(5):
-            print(f"Sentence: {''.join([vocab[token.item()].decode('utf-8') for token in y[i]])}")
+            print(f"Sentence: {''.join([vocab[str(token.item())] for token in y[i]])}")
 
             
-            print("".join([vocab[i.item()].decode('utf-8', errors = 'replace') for i in torch.multinomial(probs[0], 1)]))
+            print("".join([vocab[str(i.item())] for i in torch.multinomial(probs[0], 1)]))
             print('\n')
         
 
