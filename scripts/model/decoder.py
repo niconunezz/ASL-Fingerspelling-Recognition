@@ -13,7 +13,8 @@ class MultiHeadAttention(nn.Module):
         self.head_size = config.n_dim // config.n_heads
         self.kqv = nn.Linear(config.n_dim, 3 * config.n_dim, bias=False)
         self.proj = nn.Linear(config.n_dim, config.n_dim)
-        self.att_dropout = nn.Dropout(config.dropout)
+        self.att_dropout = config.dropout
+
         self.res_dropout = nn.Dropout(config.dropout)
         self.register_buffer("tril", torch.tril(torch.ones(config.block_size, config.block_size).view(1,1,config.block_size, config.block_size)))
     
@@ -37,11 +38,13 @@ class MultiHeadAttention(nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        att = (q @ k.transpose(-2, -1)) * (self.head_size ** -0.5)
-        att = att.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
-        att = F.softmax(att, dim=-1)
-        att = self.att_dropout(att)
-        out = att @ v
+        # att = (q @ k.transpose(-2, -1)) * (self.head_size ** -0.5)
+        # att = att.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        # att = F.softmax(att, dim=-1)
+        # att = self.att_dropout2(att)
+        # out = att @ v
+        out = F.scaled_dot_product_attention(q, k, v, dropout_p= self.att_dropout, is_causal=True)
+
         out = out.transpose(1, 2).contiguous().view(B, T, C)
         out = self.res_dropout(self.proj(out))
         return out
