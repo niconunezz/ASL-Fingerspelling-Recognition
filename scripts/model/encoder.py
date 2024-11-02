@@ -40,6 +40,8 @@ def precompute_freqs(dim, block_size ,theta: float = 10000):
     return freqs
 
 
+
+
 def apply_rotary_emb(xq: torch.Tensor,
                      xk: torch.Tensor,
                      freqs: torch.Tensor
@@ -75,8 +77,12 @@ class MultiHeadAttention(nn.Module):
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
-        att = (q @ k.transpose(-2, -1) * self.scale).softmax(dim=-1)
-        out = att @ v
+
+        # att = (q @ k.transpose(-2, -1) * self.scale).softmax(dim=-1)
+        # out = att @ v
+        out = F.scaled_dot_product_attention(q, k, v, is_causal=False)
+
+
         out = out.transpose(1, 2).contiguous().view(B, T, C)
 
         out = self.proj(out)
@@ -198,6 +204,13 @@ class SqueezeformerBlock(nn.Module):
 
         self.freqs = precompute_freqs(dim//n_heads, config.block_size)
         self.freqs = self.freqs.to(config.device)
+        """
+        #TODO
+        In addition, we cached the rotary embeddings once and fed them into each layer with
+        the input data so they are not duplicated in each layer. This resulted in 20% less parameters in the model. 
+        
+        """
+
         self.attn = MultiHeadAttention(dim, n_heads)
         self.ln_att = nn.LayerNorm(dim)
         self.ff = FeedForward(dim, expansion_factor= 4)
@@ -206,6 +219,13 @@ class SqueezeformerBlock(nn.Module):
         self.ln_conv = nn.LayerNorm(dim)
         self.ff_2 = FeedForward(dim, expansion_factor= 4)
         self.ln_ff_2 = nn.LayerNorm(dim)
+        self.apply(self._init_weights)
+    
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
     
 
     def forward(self, x):
