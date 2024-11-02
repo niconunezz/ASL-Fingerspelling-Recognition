@@ -32,7 +32,7 @@ print(f"Device: {cfg.device}")
 
 
 
-data = CustomDataset(cfg)
+data = CustomDataset(cfg, verbose = False)
 print("Data loaded")
 print(f"Data has {len(data)} examples")
 
@@ -60,7 +60,8 @@ optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
 
 print(f"Data loader examples: {len(dataloader)}")
 
-        
+
+verbose = False
 
 for epoch in range(config.epochs):
     lr = get_lr(epoch)
@@ -68,22 +69,30 @@ for epoch in range(config.epochs):
         param_group['lr'] = lr
     for i, batch in (enumerate(dataloader)):
         t0 = time.time()
+
         x, mask, y = batch['data'], batch['mask'], batch['target']
         x, y = x.to(cfg.device), y.to(cfg.device)
         mask = mask.to(cfg.device)
 
-        logits, loss = model(x, mask, y)
+
+        logits, loss = model(x, mask, y, verbose = True)
+
+        t2 = time.time()
         optimizer.zero_grad()
         loss.backward()
-       
+        t3 = time.time()
+
+        if verbose:
+            print(f"Backward took {(t3-t2)*1000:.2f} ms")
+
         norm = nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        
+
         optimizer.step()
         
         torch.cuda.synchronize()
         t1 = time.time()
         if i % 10 == 0:
-            print(f"Epoch {epoch}| iteration {i}| loss: {loss.item()}| norm: {norm}| time: {(t1-t0)*1000:.2f} ms")
+            print(f"Epoch {epoch}| iteration {i}| loss: {loss.item():.3f}| norm: {norm:.4f}| time: {(t1-t0)*1000:.2f} ms")
         
 
 def validate(model, config):
@@ -97,28 +106,32 @@ def validate(model, config):
     vocab['60'] = '<eos>'
     vocab['61'] = '<pad>'
     model.eval()
-    
-    for batch in dataloader:
+    losses = []
+    for i,batch in enumerate(dataloader):
         x, mask, y = batch['data'], batch['mask'], batch['target']
         
         x, y = x.to(cfg.device), y.to(cfg.device)
         mask = mask.to(cfg.device)
         
         logits, loss = model(x, mask, y)
-        print(f"Validation loss: {loss.item()}")
-
-        print(f"Logits: {logits.shape}")
-        probs = F.softmax(logits, dim = -1)
-        for i in range(5):
-            print(f"Sentence: {''.join([vocab[str(token.item())] for token in y[i]])}")
-
-            
-            print("".join([vocab[str(i.item())] for i in torch.multinomial(probs[0], 1)]))
-            print('\n')
+        losses.append(loss.item())
         
 
-        break
+        
+        probs = F.softmax(logits, dim = -1)
+        if i == len(dataloader) - 1:
+            
+            for i in range(5):
+                print(f"Sentence: {''.join([vocab[str(token.item())] for token in y[i]])}")
 
+                
+                print("".join([vocab[str(i.item())] for i in torch.multinomial(probs[0], 1)]))
+                print('\n')
+            
+    with open("test/loss.txt", "w") as f:
+        f.write(f"Validation loss: {sum(losses)/len(losses):.4f}")
+    
+    print(f"Validation loss: {sum(losses)/len(losses)}")
 
        
     
