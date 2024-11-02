@@ -134,8 +134,7 @@ class Decoder(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+        
 
     def forward(self, x, targets=None):
         B, T, C = x.shape
@@ -155,8 +154,8 @@ class Decoder(nn.Module):
             B, T, C = logits.shape
             
             targets = targets.view(B*T)
-           
-            loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=502)
+            
+            loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=61)
 
         return logits, loss
 
