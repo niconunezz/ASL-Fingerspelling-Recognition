@@ -35,7 +35,7 @@ class Preprocessing(nn.Module):
 def padd_or_interpolate(x, max_len, pad_token: int = 61):
         if x.shape[0] > max_len:
             matrix = F.interpolate(x.permute(1,2,0), max_len).permute(2,0,1)
-            mask = torch.ones_like(matrix[:, 0, 0])
+            mask = torch.ones((matrix.shape[0]))
             assert matrix.shape[0] == max_len
             return matrix, mask
         
@@ -45,7 +45,7 @@ def padd_or_interpolate(x, max_len, pad_token: int = 61):
             matrix = torch.cat((x, pad), dim=0)
             assert matrix.shape[0] == max_len
 
-            mask = torch.ones_like(x[:, 0, 0])
+            mask = torch.ones((x.shape[0]))
             
             mask = torch.cat([mask, pad[:, 0, 0]* 0])
             return matrix, mask
@@ -61,9 +61,9 @@ def padd_sequence(x, max_len, pad_token: int = 61):
 
 
 class CustomDataset(Dataset):
-    def __init__(self, cfg , mode = "train") -> None:
+    def __init__(self, cfg , mode = "train", verbose: bool = False) -> None:
         
-        
+        self.verbose = verbose
         self.config = cfg
         self.path = "data/tensors"
         self.tokenizer = self.setup_tokenizer()
@@ -72,9 +72,9 @@ class CustomDataset(Dataset):
         if cfg.max_ex:
             self.df = df = df.iloc[:cfg.max_ex]
         if mode == "train":
-            self.df = df = df.iloc[:len(df)*4//5]
+            self.df = df = df.iloc[:int(len(df)*0.9)]
         if mode == "val":
-            self.df = df = df.iloc[len(df)*4//5:]
+            self.df = df = df.iloc[int(len(df)*0.9):]
         self.processor = Preprocessing()
         self.mode = mode
 
@@ -82,19 +82,46 @@ class CustomDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
-        
+        import time
+        t0 = time.time()
         row = self.df.iloc[idx]
         file_id, sequence_id, phrase = row[['file_id', 'sequence_id', 'phrase']]
+        t1 = time.time()
+        if self.verbose:
+            print(f"Indexing took {(t1-t0)*1000:.2f} ms")
+        
+        t0 = time.time()
         data = self.load_seq(file_id, sequence_id)
+        t1 = time.time()
+        if self.verbose:
+            print(f"Loading data took {(t1-t0)*1000:.2f} ms")
+
+        t0 = time.time()
         x = data['arr_0']
         x = torch.from_numpy(x)
+        t1 = time.time()
+        if self.verbose:
+            print(f"Converting to tensor took {(t1-t0)*1000:.2f} ms")
+        
+        t0 = time.time()
         x = self.processor(x)
+        t1 = time.time()
+        if self.verbose:
+            print(f"Preprocessing took {(t1-t0)*1000:.2f} ms")
         
+        t0 = time.time()
         y = np.array([self.tokenizer[char] for char in list(phrase)])
-        
+        t1 = time.time()
+        if self.verbose:
+            print(f"Tokenizing took {(t1-t0)*1000:.2f} ms")
+
         if self.mode == "train" or self.mode == "val":
+            t0 = time.time()
             x, mask = padd_or_interpolate(x, self.config.block_size)
             y = padd_sequence(y, self.config.max_seq_len)
+            t1 = time.time()
+            if self.verbose:
+                print(f"Padding took {(t1-t0)*1000:.2f} ms")
 
 
         return {"data": x, "mask": mask, "target": y}
