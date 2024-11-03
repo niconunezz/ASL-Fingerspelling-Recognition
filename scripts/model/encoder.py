@@ -66,7 +66,7 @@ class MultiHeadAttention(nn.Module):
         self.proj = nn.Linear(dim, dim, bias=False)
         self.qkv = nn.Linear(dim, dim * 3, bias=False)
 
-    def forward(self, x, freqs):
+    def forward(self, x, freqs, mask):
         B, T, C = x.shape
 
         qkv = self.qkv(x).chunk(3, dim=-1)
@@ -80,7 +80,7 @@ class MultiHeadAttention(nn.Module):
 
         # att = (q @ k.transpose(-2, -1) * self.scale).softmax(dim=-1)
         # out = att @ v
-        out = F.scaled_dot_product_attention(q, k, v, is_causal=False)
+        out = F.scaled_dot_product_attention(q, k, v, attn_mask = mask, is_causal=False)
 
 
         out = out.transpose(1, 2).contiguous().view(B, T, C)
@@ -245,13 +245,19 @@ class SqueezeformerBlock(nn.Module):
     
 
     def forward(self, x, mask):
+        mask_pad = mask.bool().unsqueeze(1)
+        mask_pad = ~(mask_pad.permute(0,2,1) * mask_pad)
+
+
+        res = x
         x = x * self.scale_mhsa + self.bias_mhsa
 
-        x = x + self.attn(x, self.freqs)
+        x = res + self.attn(x, self.freqs, mask_pad.unsqueeze(1))
         x = self.ln_att(x)
+        res = x
 
         x = x * self.scale_ff_mhsa + self.bias_ff_mhsa
-        x = x + self.ff(x)
+        x = res + self.ff(x)
         x = self.ln_ff(x)
 
         x = x * self.scale_conv + self.bias_conv
@@ -260,8 +266,9 @@ class SqueezeformerBlock(nn.Module):
         x = x.permute(0, 2, 1)
         x = self.ln_conv(x)
 
+        res = x
         x = x * self.scale_ff_conv + self.bias_ff_conv
-        x = x + self.ff_2(x)
+        x = res + self.ff_2(x)
         x = self.ln_ff_2(x)
         return x
 
