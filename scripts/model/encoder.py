@@ -175,14 +175,30 @@ class ConvolutionModule(nn.Module):
         self.pointwise2 = PointwiseConv(in_channels, in_channels, stride=1, padding=0, bias=True)
         self.dropout = nn.Dropout(p= dropout_p)
     
-    def forward(self, x):
-        x = self.pointwise(x)
+    def forward(self, x_or, mask):
+        B, C, T = x_or.shape
+        mask = mask.unsqueeze(1) # B, 1, T
+        
+        if mask.size(2) > 0: # time > 0
+            x = x_or.masked_fill(~mask.bool(), 0.0)
+        
+        x = self.pointwise(x_or)
         x = self.act1(x)
         x = self.depthwise(x)
-        x = self.bn(x)
+
+        x_bn = x.view(B, T, C).reshape(B*T, C)
+        mask_bn = mask.view(-1).bool()
+        x_bn[mask_bn] = self.bn(x_bn[mask_bn])
+        
+        x = x_bn.view(B, C, T)
+
         x = self.act2(x)
         x = self.pointwise2(x)
         x = self.dropout(x)
+
+        if mask.size(2) > 0:
+            x = x.masked_fill(~mask.bool(), 0.0)
+        
         return x
 
 
@@ -228,7 +244,7 @@ class SqueezeformerBlock(nn.Module):
                 torch.nn.init.zeros_(module.bias)
     
 
-    def forward(self, x):
+    def forward(self, x, mask):
         x = x * self.scale_mhsa + self.bias_mhsa
 
         x = x + self.attn(x, self.freqs)
@@ -240,7 +256,7 @@ class SqueezeformerBlock(nn.Module):
 
         x = x * self.scale_conv + self.bias_conv
         x = x.permute(0, 2, 1)
-        x = x + self.conv(x)
+        x = x + self.conv(x, mask)
         x = x.permute(0, 2, 1)
         x = self.ln_conv(x)
 
