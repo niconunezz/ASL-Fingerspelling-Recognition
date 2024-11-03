@@ -12,9 +12,18 @@ class FeatureExtraction(nn.Module):
         super(FeatureExtraction, self).__init__()
         self.in_channels = in_channels = 32 * math.ceil(height / 2)
         self.conv_stem = nn.Conv2d(channels, 32, kernel_size=(3, 3), stride=(1,2), padding=(1, 1), bias=False)
-        self.bn_conv = BatchNormAct2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True,act_layer = nn.SiLU,drop_layer=None)
+        self.bn_conv = BatchNormAct2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True, act_layer = nn.SiLU, drop_layer=None)
         self.stem_linear = nn.Linear(in_channels, out_dim, bias=False)
         self.stem_bn = nn.BatchNorm1d(out_dim, momentum=0.95)
+        self.apply(self._init_weights)
+
+    
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        
 
     def forward(self, data, mask, verbose = False):
         import time
@@ -22,7 +31,7 @@ class FeatureExtraction(nn.Module):
         xc = data.permute(0, 3, 1, 2) # B, C, H, W
         t1 = time.time()
         if verbose:
-            print(f"Permuting data took {(t1-t0)*1000:.2f} Mseconds")
+            print(f"Permuting data took {(t1-t0)*1000:.2f} ms")
 
         t0 = time.time()
         xc = self.conv_stem(xc) # B, 32, H, W//2
@@ -32,6 +41,7 @@ class FeatureExtraction(nn.Module):
 
         t0 = time.time()
         xc = self.bn_conv(xc) # B, 32, H, W//2
+        
         t1 = time.time()
         if verbose:
             print(f"Batch norm took {(t1-t0)*1000:.2f} Mseconds")
@@ -49,14 +59,16 @@ class FeatureExtraction(nn.Module):
             print(f"Stem linear took {(t1-t0)*1000:.2f} Mseconds")
 
         t0 = time.time()
-        B, T, C = xc.shape
-        xc = xc.view(-1, C)
+        B, T, C = xc.shape # 512, 16, 52
+        
+        xc = xc.view(-1, C) # B*T, C
         t1 = time.time()
         if verbose:
             print(f"Reshaping for BN took {(t1-t0)*1000:.2f} Mseconds")
 
         t0 = time.time()
-        x_bn = xc[(mask.view(-1) == 1)].unsqueeze(0)
+       
+        x_bn = xc[(mask.view(-1) == 1)].unsqueeze(0) # 1, B*T, C
         x_bn = self.stem_bn(x_bn.permute(0, 2, 1)).permute(0, 2, 1) # B*T, C
         xc[mask.view(-1) == 1] = x_bn[0]
         t1 = time.time()
@@ -64,13 +76,8 @@ class FeatureExtraction(nn.Module):
             print(f"Batch norm for non-padded tokens took {(t1-t0)*1000:.2f} Mseconds")
 
         t0 = time.time()
-        a = ~mask.bool().unsqueeze(-1)
-        t1 = time.time()
-        if verbose:
-            print(f"Masking took {(t1-t0)*1000:.2f} Mseconds")
-        t0 = time.time()
         xc = xc.view(B, T, C)
-        xc = xc.masked_fill(a, 0.0)
+        xc = xc.masked_fill(~mask.bool().unsqueeze(-1), 0.0)
         t1 = time.time()
         if verbose:
             print(f"Final reshaping and masking took {(t1-t0)*1000:.2f} Mseconds")
@@ -91,7 +98,7 @@ class Net(nn.Module):
         self.lhand = FeatureExtraction(out_dim = 52, height=20)
         self.rhand = FeatureExtraction(out_dim = 52, height=20)
         
-        self.encoder = nn.Sequential(*[SqueezeformerBlock(config) for _ in range(config.encoder_layers)])
+        self.encoder = nn.ModuleList([SqueezeformerBlock(config) for _ in range(config.encoder_layers)])
         self.decoder = Decoder(config)
 
     def forward(self, data, mask, targets, verbose = False):
@@ -126,8 +133,8 @@ class Net(nn.Module):
 
         xc = all_together + ccat
         t0 = time.time()
-        xc = self.encoder(xc)
-        
+        for layer in self.encoder:
+            xc = layer(xc, mask)
         t1 = time.time()
         if verbose:
             print(f"Encoder took {(t1-t0)*1000} Mseconds")
