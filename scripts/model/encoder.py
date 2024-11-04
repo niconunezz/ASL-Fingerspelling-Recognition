@@ -245,31 +245,56 @@ class SqueezeformerBlock(nn.Module):
     
 
     def forward(self, x, mask):
+        """
+            x: B, T, C
+            mask: B, T
+        """
+        B, T, C = x.shape
         mask_pad = mask.bool().unsqueeze(1)
         mask_pad = ~(mask_pad.permute(0,2,1) * mask_pad)
-
+        mask_flat = mask.view(-1).bool() # B*T
 
         res = x
         x = x * self.scale_mhsa + self.bias_mhsa
 
         x = res + self.attn(x, self.freqs, mask_pad.unsqueeze(1))
+
+        # skip 1
+        x_skip = x.view(B*T, C) # B*T, C
+        x = x_skip[mask_flat].unsqueeze(0) # 1, B*T, C
+
         x = self.ln_att(x)
         res = x
 
         x = x * self.scale_ff_mhsa + self.bias_ff_mhsa
         x = res + self.ff(x)
-        x = self.ln_ff(x)
 
+        x = self.ln_ff(x)
+        # unskip 1
+        x_skip[mask_flat] = x.squeeze(0).to(x_skip.dtype)
+        x = x_skip.view(B, T, C)
+
+        res = x
         x = x * self.scale_conv + self.bias_conv
         x = x.permute(0, 2, 1)
-        x = x + self.conv(x, mask)
-        x = x.permute(0, 2, 1)
+        x = res + self.conv(x, mask).permute(0, 2, 1)
+
+        # skip 2
+        x_skip = x.view(B*T, C) # B*T, C
+        x = x_skip[mask_flat].unsqueeze(0) # 1, B*T, C
+
         x = self.ln_conv(x)
 
         res = x
         x = x * self.scale_ff_conv + self.bias_ff_conv
         x = res + self.ff_2(x)
         x = self.ln_ff_2(x)
+
+
+        # unskip 2
+        x_skip[mask_flat] = x.squeeze(0).to(x_skip.dtype)
+        x = x_skip.view(B, T, C)
+
         return x
 
-        
+    
