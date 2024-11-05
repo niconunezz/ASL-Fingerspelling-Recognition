@@ -89,7 +89,7 @@ class FeatureExtraction(nn.Module):
 
 
 class Net(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, decoder_cfg):
         super(Net, self).__init__()
         self.n_heads = config.n_heads
         self.feature_extraction = FeatureExtraction(out_dim = 208)
@@ -99,7 +99,7 @@ class Net(nn.Module):
         self.rhand = FeatureExtraction(out_dim = 52, height=20)
         
         self.encoder = nn.ModuleList([SqueezeformerBlock(config) for _ in range(config.encoder_layers)])
-        self.decoder = Decoder(config)
+        self.decoder = Decoder(decoder_cfg)
 
     def forward(self, data, mask, targets, verbose = False):
 
@@ -140,7 +140,7 @@ class Net(nn.Module):
             print(f"Encoder took {(t1-t0)*1000} Mseconds")
         t0 = time.time()
 
-        xc = self.decoder(xc, targets)
+        xc = self.decoder(xc, labels = targets, encoder_attention_mask= mask.long())
         t1 = time.time()
         if verbose:
             print(f"Decoder took {(t1-t0)*1000} Mseconds")
