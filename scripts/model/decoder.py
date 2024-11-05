@@ -2,164 +2,29 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple
+from transformers.models.speech_to_text.modeling_speech_to_text import shift_tokens_right, Speech2TextDecoder
 
 
-
-class MultiHeadAttention(nn.Module):
-
-    def __init__(self, config):
-        super().__init__()
-        self.n_heads = config.n_heads
-        self.head_size = config.n_dim // config.n_heads
-        self.kqv = nn.Linear(config.n_dim, 3 * config.n_dim, bias=False)
-        self.proj = nn.Linear(config.n_dim, config.n_dim)
-        self.att_dropout = config.dropout
-
-        self.res_dropout = nn.Dropout(config.dropout)
-        self.register_buffer("tril", torch.tril(torch.ones(config.block_size, config.block_size).view(1,1,config.block_size, config.block_size)))
-    
-    def forward(self, x, freqs_cis):
-        B, T, C = x.shape
-        # linearly transform the inputs to have queries, keys, and values
-        qkv = self.kqv(x)
-        
-
-        qkv = qkv.chunk(3, dim=-1)
-        
-        assert C%self.n_heads == 0, "Embedding dimension must be divisible by number of heads"
-
-
-        q, k, v = map(lambda t: t.view(B, T, self.n_heads, C//self.n_heads), qkv)
-
-        q,k = apply_rotary_emb(q, k, freqs_cis=freqs_cis)
-
-
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
-
-        # att = (q @ k.transpose(-2, -1)) * (self.head_size ** -0.5)
-        # att = att.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
-        # att = F.softmax(att, dim=-1)
-        # att = self.att_dropout2(att)
-        # out = att @ v
-        out = F.scaled_dot_product_attention(q, k, v, dropout_p= self.att_dropout, is_causal=True)
-
-        out = out.transpose(1, 2).contiguous().view(B, T, C)
-        out = self.res_dropout(self.proj(out))
-        return out
-        
-
-
-class FeedFoward(nn.Module):
-    """ a simple linear layer followed by a non-linearity """
-
-    def __init__(self, config):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(config.n_dim, 4 * config.n_dim),
-            nn.ReLU(),
-            nn.Linear(4 * config.n_dim, config.n_dim),
-            nn.Dropout(config.dropout),
-        )
-
-    def forward(self, x):
-        return self.net(x)
-    
-
-def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
-    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-    
-    m = torch.arange(end, device=freqs.device, dtype=torch.float32)
-    freqs = torch.outer(m, freqs)
-    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
-    
-    return freqs_cis
-
-
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
-    ndim = x.ndim
-    assert 0 <= 1 < ndim
-    assert freqs_cis.shape == (x.shape[1], x.shape[-1])
-    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
-    return freqs_cis.view(*shape)
-
-
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-
-    
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
-
-
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
-    return xq_out.type_as(xq), xk_out.type_as(xk)
-
-class Block(nn.Module):
-    """ Transformer block: communication followed by computation """
-
-    def __init__(self, config):
-        # config.n_dim: embedding dimension, config.n_heads: the number of heads we'd like
-        super().__init__()
-        head_size = config.n_dim // config.n_heads
-        self.sa = MultiHeadAttention(config)
-        self.ffwd = FeedFoward(config)
-        self.ln1 = nn.LayerNorm(config.n_dim)
-        self.ln2 = nn.LayerNorm(config.n_dim)
-
-    def forward(self, x, freqs_cis):
-        x = x + self.sa(self.ln1(x), freqs_cis)
-        x = x + self.ffwd(self.ln2(x))
-        return x
 class Decoder(nn.Module):
-
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, decoder_config):
+        super(Decoder, self).__init__()
         
-
-        self.layers = nn.ModuleList()
-        for _ in range(config.n_layer):
-            self.layers.append(Block(config))
-        self.ln_f = nn.LayerNorm(config.n_dim) # final layer norm
-        self.lm_head = nn.Linear(config.n_dim * config.block_size, 31*(config.vocab_size+1))
-        self.freqs_cis = precompute_freqs_cis(config.n_dim//config.n_heads , config.block_size)
-        # better init, not covered in the original GPT video, but important, will cover in followup video
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
-            if module.bias is not None:
-                torch.nn.init.zeros_(module.bias)
+        self.config = decoder_config
+        self.decoder = Speech2TextDecoder(decoder_config) 
+        self.lm_head = nn.Linear(decoder_config.d_model, decoder_config.vocab_size, bias=False)
         
-
-    def forward(self, x, targets=None):
-        B, T, C = x.shape
-
-        self.freqs_cis = self.freqs_cis.to(x.device)
-
-        for layer in self.layers:
-            x = layer(x, self.freqs_cis)
+        self.decoder_start_token_id = decoder_config.decoder_start_token_id
+        self.decoder_pad_token_id = decoder_config.pad_token_id #used for early stopping
+        self.decoder_end_token_id= decoder_config.eos_token_id
         
-        x = self.ln_f(x) # (B,T,C)
-        x = x.view(B, T*C)
-        logits = self.lm_head(x) # (B,31*vocab_size)
-        logits = logits.view(B, 31, -1)
-        if targets is None:
-            loss = None
-        else:
-            B, T, C = logits.shape
+    def forward(self,x, labels=None, attention_mask = None, encoder_attention_mask = None):
+        
+        if labels is not None:
+            decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
             
-            targets = targets.view(B*T)
-            
-            loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=61)
-
-        return logits, loss
-
-    
+        decoder_outputs = self.decoder(input_ids=decoder_input_ids,
+                                       encoder_hidden_states=x, 
+                                       attention_mask = attention_mask,
+                                       encoder_attention_mask = encoder_attention_mask)
+        lm_logits = self.lm_head(decoder_outputs.last_hidden_state)
+        return lm_logits
