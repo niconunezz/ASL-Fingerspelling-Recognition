@@ -54,7 +54,8 @@ class config:
 cfg = config()
 print(f"Device: {cfg.device}")
 
-
+torch.set_float32_matmul_precision('high')
+torch.backends.cudnn.allow_tf32 = True
 
 data = CustomDataset(cfg, verbose = False)
 print("Data loaded")
