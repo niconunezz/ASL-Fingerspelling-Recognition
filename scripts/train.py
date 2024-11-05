@@ -11,21 +11,45 @@ from data import CustomDataset
 import torch.nn.functional as F
 from dataclasses import dataclass
 from torch.utils.data import DataLoader
+from transformers.models.speech_to_text import Speech2TextConfig
+
 
 @dataclass
 class config:
     n_dim: int = 208
     n_heads: int = 2
-    block_size: int = 16
+    block_size: int = 384
     max_seq_len: int = 31
-    encoder_layers: int = 5
+    encoder_layers: int = 4
     vocab_size: int = 62
-    n_layer: int = 6
+    n_layer: int = 8
     dropout: float = 0.1
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     val_files: int = 512
-    epochs: int = 5
+    epochs: int = 10
     max_ex: int = None
+
+    config = Speech2TextConfig.from_pretrained("facebook/s2t-small-librispeech-asr")
+    config.encoder_layers = 0
+    config.decoder_layers = 2
+    config.d_model = n_dim
+    config.max_target_positions = 1024 #?
+    config.num_hidden_layers = 1
+    config.vocab_size = 62
+    config.bos_token_id = 59
+    config.eos_token_id = 60
+    config.decoder_start_token_id = 59
+    config.pad_token_id = 61
+    config.num_conv_layers = 0
+    config.conv_kernel_sizes = []
+    config.max_length = n_dim
+    config.input_feat_per_channel = n_dim
+    config.num_beams = 1
+    config.attention_dropout = 0.2
+    # config.dropout = 0.2
+    config.decoder_ffn_dim = 512
+    config.init_std = 0.02
+
 
 cfg = config()
 print(f"Device: {cfg.device}")
@@ -36,16 +60,16 @@ data = CustomDataset(cfg, verbose = False)
 print("Data loaded")
 print(f"Data has {len(data)} examples")
 
-dataloader = DataLoader(data, batch_size=512, shuffle=False)
-model = Net(cfg)
+dataloader = DataLoader(data, batch_size=128, shuffle=False)
+model = Net(cfg, cfg.config)
 model.to(cfg.device)
 
-print(f"Model has {(sum(p.numel() for p in model.parameters())/1e6):.2f} M parameters")
+print(f"Model has {(sum(p.numel() for p in model.parameters() if p.requires_grad)/1e6):.2f} M parameters")
 
-mx_lr = 1e-3
+mx_lr = 4.5e-3
 mn_lr = 1e-5
-warmup_epoch = 1
-max_epochs = cfg.epochs 
+warmup_epoch = 0
+max_epochs = len(dataloader)
 
 def get_lr(it):
     if it < warmup_epoch:
@@ -62,20 +86,26 @@ print(f"Data loader examples: {len(dataloader)}")
 
 
 verbose = False
-
+t0 = 0
 for epoch in range(config.epochs):
-    lr = get_lr(epoch)
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+    
     for i, batch in (enumerate(dataloader)):
         t0 = time.time()
+        lr = get_lr(i)
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
+        
 
         x, mask, y = batch['data'], batch['mask'], batch['target']
         x, y = x.to(cfg.device), y.to(cfg.device)
         mask = mask.to(cfg.device)
 
-
-        logits, loss = model(x, mask, y, verbose = True)
+        
+        logits = model(x, mask, y, verbose = False)
+            
+        B, T, C = logits.shape
+        targets = y.view(B*T)    
+        loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=61)
 
         t2 = time.time()
         optimizer.zero_grad()
@@ -91,8 +121,8 @@ for epoch in range(config.epochs):
         
         torch.cuda.synchronize()
         t1 = time.time()
-        if i % 10 == 0:
-            print(f"Epoch {epoch}| iteration {i}| loss: {loss.item():.3f}| norm: {norm:.4f}| time: {(t1-t0)*1000:.2f} ms")
+        print(f"Epoch {epoch}| iteration {i}| loss: {loss.item():.3f}| lr: {lr:.4f} | norm: {norm:.4f}| time: {(t1-t0)*1000:.2f} ms")
+            
         
 
 def validate(model, config):
@@ -113,9 +143,13 @@ def validate(model, config):
         x, y = x.to(cfg.device), y.to(cfg.device)
         mask = mask.to(cfg.device)
         
-        logits, loss = model(x, mask, y)
+        logits = model(x, mask, y)
+
+        B, T, C = logits.shape
+        targets = y.view(B*T)
+        loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=61)
+
         losses.append(loss.item())
-        
 
         
         probs = F.softmax(logits, dim = -1)
@@ -128,12 +162,16 @@ def validate(model, config):
                 print("".join([vocab[str(i.item())] for i in torch.multinomial(probs[0], 1)]))
                 print('\n')
             
-    with open("test/loss.txt", "w") as f:
-        f.write(f"Validation loss: {sum(losses)/len(losses):.4f}")
-    
     print(f"Validation loss: {sum(losses)/len(losses)}")
 
-       
-    
+    file = json.load(open("scripts/test/loss.json", "r"))
 
-validate(model, cfg)
+    max_loss = file['loss']
+    new_loss = sum(losses)/len(losses)
+    if  new_loss < max_loss:
+        file['loss'] = new_loss
+        json.dump(file, open("scripts/test/loss.json", "w"))
+            
+
+if __name__ == "__main__":
+    validate(model, cfg)
