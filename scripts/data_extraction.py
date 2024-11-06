@@ -3,86 +3,85 @@ import pickle
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import time
 from tokenizer import RegexTokenizer
+from pathlib import Path
 
 class Extractor():
-
     def __init__(self, merges = False):
         self.train_df = train_df = pd.read_csv("data/merged.csv")
-
         self.sequence_to_phrase = {sequence: phrase for sequence, phrase in zip(train_df.sequence_id, train_df.phrase)}
-        
         self.unique_files = unique_files = train_df.file_id.unique()
         self.file_to_sequences = {file : train_df.loc[train_df['file_id'] == file].sequence_id for file in unique_files}
+        self.base_out_dir = Path("data/tensors3")
 
-        self.tok = RegexTokenizer()
-        if not merges:
-            self.merges, self.vocab = self.init_tokenizer(vocab_size=500)
-            self.vocab_size = len(self.vocab) + 1 # +1 for padding token
-        else:
-            
-            self.merges= pickle.load(open("data/extractor_merges.pkl", "rb"))
-            self.vocab = pickle.load(open("data/extractor.pkl", "rb"))
-            self.vocab_size = len(self.vocab) + 1 # +1 for padding token
-        print("Tokenizer initialized")
-        
-    def init_tokenizer(
-            self, 
-            vocab_size: int
-            ) -> tuple[dict, dict]:
-        
-        phrases = self.sequence_to_phrase.values()
-        text = ' '.join(phrases)
-        tokens, merges = self.tok.train(text, vocab_size, verbose=False)
+    def extract(self, debug = False):
+        total_start = time.time()
 
-        vocab = {idx: bytes([idx]) for idx in range(256)}
-        for (el0, el1), v in merges.items():
-            vocab[v] = vocab[el0] + vocab[el1]
-        
+        # Define columns to read from parquet
+        cols = []
+        for kpoint, r in zip(['right_hand', 'left_hand', 'face', 'pose'],[21, 21, 76, 12]):
+            for dim in ['x','y','z']:
+                for i in range(r):
+                    cols.append(f'{dim}_{kpoint}_{i}')
 
-        with open("data/extractor.pkl", "wb") as f:
-            pickle.dump(vocab, f)
-        
-        with open("data/extractor_merges.pkl", "wb") as f:
-            pickle.dump(merges, f)
-
-        return merges, vocab
-    
-    
-
-    def extract(self):
         for file in tqdm(self.unique_files):
-            f = pd.read_parquet(f"data/train_landmarks/{file}.parquet")
+            file_start = time.time()
             
+            # Timer for parquet reading
+            parquet_start = time.time()
+            
+            f = pd.read_parquet(f"data/train_landmarks/{file}.parquet", columns = cols)
+            if debug:
+                print(f"parquet read {(time.time() - parquet_start)*100} ms")
+            
+
             for sequence in (self.file_to_sequences[file]):
+                seq_start = time.time()
                 
+              
+                process_start = time.time()
                 curr_sqnce = f.loc[f.index == sequence]
-                
-                
-                kpoints = ['right_hand', 'left_hand', 'face', 'pose']
-                ranges = [20, 20, 75, 11]
+                ranges = [21, 21, 76, 12]
 
-                array = np.concatenate([np.stack([curr_sqnce.loc[:, f'{dim}_{kpoint}_0' : f"{dim}_{kpoint}_{r}"].to_numpy()
-                                        for dim in ['x','y','z']], axis=2)
-                                        for kpoint, r in zip(kpoints, ranges)], axis=1)
+                start = 0
+                arr = []
+                for r2 in ranges:
+                    c = curr_sqnce.iloc[:, start: start+r2 *3]
+                    v = c.to_numpy()
+                    arr.append(v.reshape(-1, r2, 3))
+                    
+                    start += r2*3
                 
+                array = np.concatenate(arr, axis=1)
+
+                if debug:
+                    print(f"processing {(time.time() - process_start)*100}")
                 assert array.shape[1] == 130 and array.shape[2] == 3, f"Shape mismatch: {array.shape}"
+
+                save_start = time.time()
+                output_dir = self.base_out_dir / f"{file}"
+                output_dir.mkdir(parents=True, exist_ok=True)
+
+               
+                out_path = output_dir / f"{sequence}.npz"
+                np.savez(out_path, np.array(array))
+
+                if debug:
+                    print(f"saving {(time.time() - save_start)*100:.2f} ms")
                 
-                #TODO: Must add start and end token
-                label = np.array(self.tok.encode(self.sequence_to_phrase[sequence], self.merges))
+                if debug:
+                    print(f"Sequence processed in {(time.time() - seq_start)*100:.2f} seconds")
 
-                try:
-                    label = label.astype(int)
-                except Exception as e:
-                    print(f" Exception: {e}")
-                    print(f"Some error occured with sequence: {sequence}")
-                    print(f"original phrase: {self.sequence_to_phrase[sequence]}")
-                    print(f"tokenized phrase: {label}")
 
-                os.makedirs(f"data/tensors/{file}", exist_ok=True)
-                np.savez_compressed(f"data/tensors/{file}/{sequence}", np.array(array), np.array(label))
+            if debug:
+                print(f"File {file} processed in {(time.time() - file_start)*100:.2f} seconds")
         
-    
+        total_time = time.time() - total_start
+        if debug:
+            print(f"Total time: {total_time} seconds")
+        
+        
 
 if __name__ == "__main__":
     extractor = Extractor(merges=True)
