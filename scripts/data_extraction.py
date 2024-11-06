@@ -20,6 +20,7 @@ class Extractor():
             self.merges, self.vocab = self.init_tokenizer(vocab_size=500)
             self.vocab_size = len(self.vocab) + 1 # +1 for padding token
         else:
+            
             self.merges= pickle.load(open("data/extractor_merges.pkl", "rb"))
             self.vocab = pickle.load(open("data/extractor.pkl", "rb"))
             self.vocab_size = len(self.vocab) + 1 # +1 for padding token
