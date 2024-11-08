@@ -30,8 +30,9 @@ class Extractor():
                     
             start += r2*3
                 
-            array = np.concatenate(arr, axis=1)
-
+        array = np.concatenate(arr, axis=1)
+       
+        
         if debug:
             print(f"processing {(time.time() - process_start)*100}")
         assert array.shape[1] == 130 and array.shape[2] == 3, f"Shape mismatch: {array.shape}"
@@ -55,7 +56,6 @@ class Extractor():
     def extract(self, debug = False):
         total_start = time.time()
 
-        # Define columns to read from parquet
         cols = []
         for kpoint, r in zip(['right_hand', 'left_hand', 'face', 'pose'],[21, 21, 76, 12]):
             for dim in ['x','y','z']:
@@ -75,8 +75,7 @@ class Extractor():
                 print(f"parquet read {(time.time() - parquet_start)*100} ms")
             
     
-            with ThreadPoolExecutor(max_workers=16) as executor:
-                futures = [executor.submit(self.process_seq, file, sequence, f, debug) for sequence in (self.file_to_sequences[file])]
+            self.process_seq(file, self.file_to_sequences[file].iloc[0], f, debug)
                 
                 
             n_seq =len(self.file_to_sequences[file])
@@ -92,5 +91,5 @@ class Extractor():
 
 if __name__ == "__main__":
     extractor = Extractor()
-    extractor.extract()
+    extractor.extract(debug=False)
     print("done")
