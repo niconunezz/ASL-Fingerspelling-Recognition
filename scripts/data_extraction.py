@@ -81,7 +81,7 @@ class Extractor():
                 
             n_seq =len(self.file_to_sequences[file])
             tt = time.time() - file_start
-            print(f"processed in {tt:.2f} seconds| {n_seq/tt:.2f} sec/seq")
+            print(f"processed in {tt:.2f} seconds| {n_seq/tt:.2f} seq/s")
 
         
         total_time = time.time() - total_start
