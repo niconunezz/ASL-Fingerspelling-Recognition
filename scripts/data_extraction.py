@@ -62,7 +62,7 @@ class Extractor():
                 for i in range(r):
                     cols.append(f'{dim}_{kpoint}_{i}')
 
-        for file in tqdm(self.unique_files):
+        for file in (self.unique_files):
             file_start = time.time()
             
             # Timer for parquet reading
@@ -79,9 +79,9 @@ class Extractor():
                 futures = [executor.submit(self.process_seq, file, sequence, f, debug) for sequence in (self.file_to_sequences[file])]
                 
                 
-
-            if debug:
-                print(f"File {file} processed in {(time.time() - file_start)*100:.2f} seconds")
+            n_seq =len(self.file_to_sequences[file])
+            tt = time.time() - file_start
+            print(f"processed in {tt:.2f} seconds| {n_seq/tt:.2f} sec/seq")
 
         
         total_time = time.time() - total_start
