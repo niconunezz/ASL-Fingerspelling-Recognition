@@ -1,16 +1,13 @@
-import os
-import pickle
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import time
-from tokenizer import RegexTokenizer
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 
 class Extractor():
-    def __init__(self, merges = False):
+    def __init__(self):
         self.train_df = train_df = pd.read_csv("data/merged.csv")
         self.sequence_to_phrase = {sequence: phrase for sequence, phrase in zip(train_df.sequence_id, train_df.phrase)}
         self.unique_files = unique_files = train_df.file_id.unique()
@@ -20,7 +17,6 @@ class Extractor():
     def process_seq(self, file, sequence, f, debug = False):
         seq_start = time.time()
                 
-              
         process_start = time.time()
         curr_sqnce = f.loc[f.index == sequence]
         ranges = [21, 21, 76, 12]
@@ -71,8 +67,10 @@ class Extractor():
             
             # Timer for parquet reading
             parquet_start = time.time()
-            
-            f = pd.read_parquet(f"data/train_landmarks/{file}.parquet", columns = cols)
+            try:
+                f = pd.read_parquet(f"data/train_landmarks/{file}.parquet", columns = cols)
+            except Exception as e:
+                continue
             if debug:
                 print(f"parquet read {(time.time() - parquet_start)*100} ms")
             
@@ -93,6 +91,6 @@ class Extractor():
         
 
 if __name__ == "__main__":
-    extractor = Extractor(merges=True)
+    extractor = Extractor()
     extractor.extract()
     print("done")
