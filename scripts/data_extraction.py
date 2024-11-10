@@ -12,7 +12,7 @@ class Extractor():
         self.sequence_to_phrase = {sequence: phrase for sequence, phrase in zip(train_df.sequence_id, train_df.phrase)}
         self.unique_files = unique_files = train_df.file_id.unique()
         self.file_to_sequences = {file : train_df.loc[train_df['file_id'] == file].sequence_id for file in unique_files}
-        self.base_out_dir = Path("data/tensors3")
+        self.base_out_dir = Path("data/tensors")
 
     def process_seq(self, file, sequence, f, debug = False):
         seq_start = time.time()
