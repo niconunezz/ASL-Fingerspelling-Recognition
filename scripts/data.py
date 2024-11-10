@@ -65,7 +65,7 @@ class CustomDataset(Dataset):
         
         self.verbose = verbose
         self.config = cfg
-        self.path = "data/tensors3"
+        self.path = "data/tensors"
         self.tokenizer = self.setup_tokenizer()
 
         self.df = df = pd.read_csv("data/train.csv")
