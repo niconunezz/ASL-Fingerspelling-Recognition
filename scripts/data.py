@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import torch
 import numpy as np
 import pandas as pd
@@ -61,14 +62,14 @@ def padd_sequence(x, max_len, pad_token: int = 61):
 
 
 class CustomDataset(Dataset):
-    def __init__(self, cfg , mode = "train", verbose: bool = False) -> None:
+    def __init__(self, cfg , folder = "1", mode = "train", verbose: bool = False) -> None:
         
         self.verbose = verbose
         self.config = cfg
-        self.path = "data/tensors"
+        self.path = "data/tensors2/{folder}"
         self.tokenizer = self.setup_tokenizer()
 
-        self.df = df = pd.read_csv("data/train.csv")
+        self.df = df = pd.read_csv("data/train.csv").query("fold == {folder}").reset_index(drop = True)
         if cfg.max_ex:
             self.df = df = df.iloc[:cfg.max_ex]
         if mode == "train":
@@ -78,26 +79,27 @@ class CustomDataset(Dataset):
         self.processor = Preprocessing()
         self.mode = mode
 
+
     def __len__(self) -> int:
         return len(self.df)
 
     def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
-        import time
+        
         t0 = time.time()
         row = self.df.iloc[idx]
-        file_id, sequence_id, phrase = row[['file_id', 'sequence_id', 'phrase']]
+        sequence_id, phrase = row[['sequence_id', 'phrase']]
         t1 = time.time()
         if self.verbose:
             print(f"Indexing took {(t1-t0)*1000:.2f} ms")
         
         t0 = time.time()
-        data = self.load_seq(file_id, sequence_id)
+        x = self.load_seq(sequence_id)
         t1 = time.time()
         if self.verbose:
             print(f"Loading data took {(t1-t0)*1000:.2f} ms")
 
         t0 = time.time()
-        x = data['arr_0']
+        
         x = torch.from_numpy(x)
         t1 = time.time()
         if self.verbose:
@@ -127,8 +129,8 @@ class CustomDataset(Dataset):
         return {"data": x, "mask": mask, "target": y}
 
 
-    def load_seq(self, file, seq):
-        path = f"{self.path}/{file}/{seq}.npz"
+    def load_seq(self, seq):
+        path = f"{self.path}/{seq}.npy"
         return np.load(path)
 
 
