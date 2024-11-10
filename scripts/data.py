@@ -65,7 +65,7 @@ class CustomDataset(Dataset):
         
         self.verbose = verbose
         self.config = cfg
-        self.path = "data/tensors"
+        self.path = "data/tensors3"
         self.tokenizer = self.setup_tokenizer()
 
         self.df = df = pd.read_csv("data/train.csv")
@@ -128,7 +128,7 @@ class CustomDataset(Dataset):
 
 
     def load_seq(self, file, seq):
-        path = f"{self.path}/{file}/{seq}.npy.npz"
+        path = f"{self.path}/{file}/{seq}.npz"
         return np.load(path)
 
 
