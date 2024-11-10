@@ -62,14 +62,14 @@ def padd_sequence(x, max_len, pad_token: int = 61):
 
 
 class CustomDataset(Dataset):
-    def __init__(self, cfg , folder = "1", mode = "train", verbose: bool = False) -> None:
+    def __init__(self, cfg , folder ="1", mode = "train", verbose: bool = False) -> None:
         
         self.verbose = verbose
         self.config = cfg
-        self.path = "data/tensors2/{folder}"
+        self.path = f"data/tensors2/{folder}"
         self.tokenizer = self.setup_tokenizer()
 
-        self.df = df = pd.read_csv("data/train.csv").query("fold == {folder}").reset_index(drop = True)
+        self.df = df = pd.read_csv("data/train.csv").query(f"fold == {folder}").reset_index(drop = True)
         if cfg.max_ex:
             self.df = df = df.iloc[:cfg.max_ex]
         if mode == "train":
