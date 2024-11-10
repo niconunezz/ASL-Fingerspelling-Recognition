@@ -4,20 +4,22 @@ from tqdm import tqdm
 import time
 from pathlib import Path
 
-
+ 
 class Extractor():
     def __init__(self):
-        self.train_df = train_df = pd.read_csv("data/merged.csv", dtype_backend='pyarrow')
+        self.train_df = train_df = pd.read_csv("data/train.csv", dtype_backend='pyarrow')
         self.sequence_to_phrase = dict(zip(train_df.sequence_id, train_df.phrase))
         self.unique_files = unique_files = train_df.file_id.unique()
         self.file_to_sequences = {file : train_df.loc[train_df['file_id'] == file].sequence_id for file in unique_files}
-        self.base_out_dir = Path("data/tensors")
+        self.seq_to_fold = train_df[['sequence_id', 'fold']].set_index('sequence_id')['fold'].to_dict()
+        self.base_out_dir = Path("data/tensors2")
 
-    def process_seq(self, file, sequence, f, debug = False):
+    def process_seq(self, sequence, f, debug = False):
         seq_start = time.time()
                 
         process_start = time.time()
         curr_sqnce = f.loc[f.index == sequence]
+
         ranges = [21, 21, 76, 12]
 
         start = 0
@@ -37,7 +39,7 @@ class Extractor():
         assert array.shape[1] == 130 and array.shape[2] == 3, f"Shape mismatch: {array.shape}"
 
         save_start = time.time()
-        output_dir = self.base_out_dir / str(file)
+        output_dir = self.base_out_dir / str(self.seq_to_fold[sequence])
         output_dir.mkdir(parents=True, exist_ok=True)
 
                
@@ -63,7 +65,7 @@ class Extractor():
             print(f"parquet read {(time.time() - parquet_start)*100:.2f} ms")
         
         for sequence in self.file_to_sequences[file]:
-            self.process_seq(file, sequence, f, debug)
+            self.process_seq(sequence, f, debug)
             
                 
         n_seq =len(self.file_to_sequences[file])
@@ -79,14 +81,10 @@ class Extractor():
                 cols.extend([f'{dim}_{kpoint}_{i}' for i in range(r)])
                 
 
-        for file in (self.unique_files):
-            
+        
+        for file in self.unique_files:
             self.process_file(file, cols, debug)
         
-        
-        
-        
-
         
         total_time = time.time() - total_start
         if debug:
