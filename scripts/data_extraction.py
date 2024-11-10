@@ -37,7 +37,7 @@ class Extractor():
         assert array.shape[1] == 130 and array.shape[2] == 3, f"Shape mismatch: {array.shape}"
 
         save_start = time.time()
-        output_dir = self.base_out_dir / str({file})
+        output_dir = self.base_out_dir / str(file)
         output_dir.mkdir(parents=True, exist_ok=True)
 
                
@@ -61,8 +61,10 @@ class Extractor():
             pass
         if debug:
             print(f"parquet read {(time.time() - parquet_start)*100:.2f} ms")
+        
+        for sequence in self.file_to_sequences[file]:
+            self.process_seq(file, sequence, f, debug)
             
-        self.process_seq(file, self.file_to_sequences[file].iloc[0], f, debug)
                 
         n_seq =len(self.file_to_sequences[file])
         tt = time.time() - file_start
@@ -80,6 +82,10 @@ class Extractor():
         for file in (self.unique_files):
             
             self.process_file(file, cols, debug)
+        
+        
+        
+        
 
         
         total_time = time.time() - total_start
