@@ -62,12 +62,13 @@ def padd_sequence(x, max_len, pad_token: int = 61):
 
 
 class CustomDataset(Dataset):
-    def __init__(self, cfg , folder ="1", mode = "train", verbose: bool = False) -> None:
+    def __init__(self, cfg , folder ="1", mode = "train", aug = None, verbose: bool = False) -> None:
         
         self.verbose = verbose
         self.config = cfg
         self.path = f"data/tensors2/{folder}"
         self.tokenizer = self.setup_tokenizer()
+        self.aug = aug
 
         self.df = df = pd.read_csv("data/train.csv").query(f"fold == {folder}").reset_index(drop = True)
         if cfg.max_ex:
@@ -117,13 +118,17 @@ class CustomDataset(Dataset):
         if self.verbose:
             print(f"Tokenizing took {(t1-t0)*1000:.2f} ms")
 
-        if self.mode == "train" or self.mode == "val":
-            t0 = time.time()
-            x, mask = padd_or_interpolate(x, self.config.block_size)
-            y = padd_sequence(y, self.config.max_seq_len)
-            t1 = time.time()
-            if self.verbose:
-                print(f"Padding took {(t1-t0)*1000:.2f} ms")
+        
+        if self.aug:
+            self.augment(x.numpy())
+
+        t0 = time.time()
+
+        x, mask = padd_or_interpolate(x, self.config.block_size)
+        y = padd_sequence(y, self.config.max_seq_len)
+        t1 = time.time()
+        if self.verbose:
+            print(f"Padding took {(t1-t0)*1000:.2f} ms")
 
 
         return {"data": x, "mask": mask, "target": y}
@@ -132,6 +137,10 @@ class CustomDataset(Dataset):
     def load_seq(self, seq):
         path = f"{self.path}/{seq}.npy"
         return np.load(path)
+    
+    def augment(self, x):
+        x_aug = self.aug(image = x)['image']
+        return x_aug
 
 
     def setup_tokenizer(self):
