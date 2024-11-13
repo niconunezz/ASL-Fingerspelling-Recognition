@@ -8,6 +8,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
 import torch.nn.functional as F
+import tiktoken
 
 
 class Preprocessing(nn.Module):
@@ -33,7 +34,7 @@ class Preprocessing(nn.Module):
         
 
 
-def padd_or_interpolate(x, max_len, pad_token: int = 61):
+def padd_or_interpolate(x, max_len, pad_token: int = 100259):
         if x.shape[0] > max_len:
             matrix = F.interpolate(x.permute(1,2,0), max_len).permute(2,0,1)
             mask = torch.ones((matrix.shape[0]))
@@ -54,7 +55,7 @@ def padd_or_interpolate(x, max_len, pad_token: int = 61):
             
 
 
-def padd_sequence(x, max_len, pad_token: int = 61):
+def padd_sequence(x, max_len, pad_token: int = 100259):
     return np.pad(x, ((0, max_len - x.shape[0])), mode='constant', constant_values = pad_token)
             
 
@@ -67,7 +68,9 @@ class CustomDataset(Dataset):
         self.verbose = verbose
         self.config = cfg
         self.path = f"data/tensors2/{folder}"
-        self.tokenizer = self.setup_tokenizer()
+        # self.tokenizer = self.setup_tokenizer()
+        self.tokenizer, self.eos, self.pad = self.setup_tokenizer2().values()
+
         self.aug = aug
 
         self.df = df = pd.read_csv("data/train.csv").query(f"fold == {folder}").reset_index(drop = True)
@@ -95,6 +98,7 @@ class CustomDataset(Dataset):
         
         t0 = time.time()
         x = self.load_seq(sequence_id)
+        
         t1 = time.time()
         if self.verbose:
             print(f"Loading data took {(t1-t0)*1000:.2f} ms")
@@ -113,23 +117,24 @@ class CustomDataset(Dataset):
             print(f"Preprocessing took {(t1-t0)*1000:.2f} ms")
         
         t0 = time.time()
-        y = np.array([self.tokenizer[char] for char in list(phrase)])
+        # y = np.array([self.tokenizer[char] for char in list(phrase)])
+        y = np.array(self.tokenizer.encode(phrase))
+       
         t1 = time.time()
         if self.verbose:
             print(f"Tokenizing took {(t1-t0)*1000:.2f} ms")
 
-        
+       
         if self.aug:
             self.augment(x.numpy())
 
         t0 = time.time()
 
-        x, mask = padd_or_interpolate(x, self.config.block_size)
-        y = padd_sequence(y, self.config.max_seq_len)
+        x, mask = padd_or_interpolate(x, self.config.block_size, self.pad)
+        y = padd_sequence(y, self.config.max_seq_len, self.pad)
         t1 = time.time()
         if self.verbose:
             print(f"Padding took {(t1-t0)*1000:.2f} ms")
-
 
         return {"data": x, "mask": mask, "target": y}
 
@@ -145,7 +150,17 @@ class CustomDataset(Dataset):
 
     def setup_tokenizer(self):
         self.tokenizer = json.load(open("data/supplemental_landmarks/character_to_prediction_index.json"))
-        self.tokenizer["<sos>"] = 59
+
         self.tokenizer["<eos>"] = 60
         self.tokenizer["<pad>"] = 61
         return self.tokenizer 
+    
+    def setup_tokenizer2(self):
+        enc = tiktoken.get_encoding("cl100k_base")
+
+        eos = enc._special_tokens['<|endoftext|>']
+        pad = enc._special_tokens['<|fim_middle|>']
+
+        return {"tokenizer":enc,
+                "eos":eos,
+                "pad":pad}
