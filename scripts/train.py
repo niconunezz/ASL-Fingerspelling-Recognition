@@ -27,9 +27,10 @@ class config:
     val_files: int = 16
     epochs: int = 10
     max_ex: int = None
-    aug = A.Compose([A.Resample(sample_rate = (0.3, 2), p = 0.8),
-                    #  A.TemporalCrop(length = 384, p = 0.8),
-                     A.TimeShift(p = 0.5)])
+    aug = A.Compose([A.Resample(sample_rate = (0.3, 2.), p = 0.8),
+                     #A.TemporalCrop(length = 384, p = 0.5),
+                     A.TimeShift(p = 0.5),
+                     A.SpatialAffine(scale=(0.7,1.3),shear=(-0.2,0.2),shift=(-0.15,0.15),degree=(-30,30),p=0.75)])
 
     config = Speech2TextConfig.from_pretrained("facebook/s2t-small-librispeech-asr")
     config.encoder_layers = 0
@@ -82,12 +83,9 @@ def get_lr(it):
     return (mx_lr-mn_lr) * ((1 + math.cos(math.pi * (it - warmup_epoch) / (max_epochs - warmup_epoch))) / 2) + mn_lr
 
 
-# TODO: check if correct
 def validate(model, config):
     data = CustomDataset(cfg = config, mode="val")
     dataloader = DataLoader(data, batch_size= config.val_files, shuffle=False)
-    print(f"Validation data has {len(data)} examples")
-    print(f"Validation data loader has {len(dataloader)} examples")
     
     vocab = json.load(open("data/supplemental_landmarks/prediction_index_to_character.json"))
     vocab['59'] = '<sos>'
@@ -113,7 +111,7 @@ def validate(model, config):
         if i == len(dataloader) - 1:
             probs = F.softmax(logits, dim = -1)
             
-            for i in range(1):
+            for i in range(4):
                 print(f"Sentence: {''.join([vocab[str(token.item())] for token in y[i]])}")
 
                 
@@ -166,7 +164,7 @@ for epoch in range(config.epochs):
         if verbose:
             print(f"Backward took {(t3-t2)*1000:.2f} ms")
 
-        norm = nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        norm = nn.utils.clip_grad_norm_(model.parameters(), 4.0)
 
         optimizer.step()
         
