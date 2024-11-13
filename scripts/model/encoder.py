@@ -201,9 +201,9 @@ class SqueezeformerBlock(nn.Module):
 
         self.attn = MultiHeadAttention(dim, n_heads)
         self.ln_att = nn.LayerNorm(dim)
-        self.ff = FeedForward(dim, expansion_factor= 4)
+        self.ff = FeedForward(dim, expansion_factor= 1)
         self.ln_ff = nn.LayerNorm(dim)
-        self.conv = ConvolutionModule(dim, kernel_size=3, expansion_factor=2)
+        self.conv = ConvolutionModule(dim, kernel_size=51, expansion_factor=2)
         self.ln_conv = nn.LayerNorm(dim)
         self.ff_2 = FeedForward(dim, expansion_factor= 4)
         self.ln_ff_2 = nn.LayerNorm(dim)
