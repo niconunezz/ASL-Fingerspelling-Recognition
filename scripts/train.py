@@ -12,15 +12,16 @@ from dataclasses import dataclass
 from torch.utils.data import DataLoader
 from transformers.models.speech_to_text import Speech2TextConfig
 import augmentations as A
+import tiktoken
 
 @dataclass
 class config:
     n_dim: int = 208
-    n_heads: int = 2
+    n_heads: int = 4
     block_size: int = 384
     max_seq_len: int = 31
     encoder_layers: int = 8
-    vocab_size: int = 62
+    vocab_size: int = 100277
     n_layer: int = 8
     dropout: float = 0.1
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
@@ -34,15 +35,15 @@ class config:
 
     config = Speech2TextConfig.from_pretrained("facebook/s2t-small-librispeech-asr")
     config.encoder_layers = 0
-    config.decoder_layers = 2
+    config.decoder_layers = 4
     config.d_model = n_dim
-    config.max_target_positions = 1024 #?
+    config.max_target_positions = 100277 #?
     config.num_hidden_layers = 1
-    config.vocab_size = 62
-    config.bos_token_id = 59
-    config.eos_token_id = 60
-    config.decoder_start_token_id = 59
-    config.pad_token_id = 61
+    config.vocab_size = 100277
+    config.bos_token_id = 100258
+    config.eos_token_id = 100257
+    config.decoder_start_token_id = 100258
+    config.pad_token_id = 100259
     config.num_conv_layers = 0
     config.conv_kernel_sizes = []
     config.max_length = n_dim
@@ -87,10 +88,14 @@ def validate(model, config):
     data = CustomDataset(cfg = config, mode="val")
     dataloader = DataLoader(data, batch_size= config.val_files, shuffle=False)
     
-    vocab = json.load(open("data/supplemental_landmarks/prediction_index_to_character.json"))
-    vocab['59'] = '<sos>'
-    vocab['60'] = '<eos>'
-    vocab['61'] = '<pad>'
+    # vocab = json.load(open("data/supplemental_landmarks/prediction_index_to_character.json"))
+    # vocab['59'] = '<sos>'
+    # vocab['60'] = '<eos>'
+    # vocab['61'] = '<pad>'
+
+    enc = tiktoken.get_encoding("cl100k_base")
+    
+
     model.eval()
     losses = []
     for i,batch in enumerate(dataloader):
@@ -103,7 +108,7 @@ def validate(model, config):
 
         B, T, C = logits.shape
         targets = y.view(B*T)
-        loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=61)
+        loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=100259)
 
         losses.append(loss.item())
 
@@ -111,11 +116,19 @@ def validate(model, config):
         if i == len(dataloader) - 1:
             probs = F.softmax(logits, dim = -1)
             
-            for i in range(4):
-                print(f"Sentence: {''.join([vocab[str(token.item())] for token in y[i]])}")
+            for i in range(1):
+                # print(f"Sentence: {''.join([vocab[str(token.item())] for token in y[i]])}")
 
+                # print("Guesed: ","".join([vocab[str(i.item())] for i in torch.multinomial(probs[0], 1)]))
+                sent = enc.decode(y[i].tolist())
+                sent =sent.replace("<|fim_middle|>", "")
+
+                print(f"Sentence: {sent}")
+
+                guess = enc.decode([i.item() for i in torch.multinomial(probs[0], 1)])
+                guess = guess.replace("<|fim_middle|>", " <pad> ")
+                print(f"Guesed: {guess}" )
                 
-                print("Guesed: ","".join([vocab[str(i.item())] for i in torch.multinomial(probs[0], 1)]))
                 
             
     print(f"Validation loss: {sum(losses)/len(losses)}")
@@ -154,7 +167,7 @@ for epoch in range(config.epochs):
             
         B, T, C = logits.shape
         targets = y.view(B*T)    
-        loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=61)
+        loss = F.cross_entropy(logits.view(B*T, C), targets, ignore_index=100259)
 
         t2 = time.time()
         optimizer.zero_grad()
