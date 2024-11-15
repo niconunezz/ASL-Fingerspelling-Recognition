@@ -3,30 +3,29 @@ import mediapipe as mp
 import pandas as pd
 import os
 import time
+import subprocess
 
 
 
-def detect_sign_language(frame, data, path):
+def detect_sign_language(frame, data, path, hands, debug = False):
     
-    mp_hands = mp.solutions.hands
-   
-    with mp_hands.Hands(
-        static_image_mode=False,
-        max_num_hands=2,
-        min_detection_confidence=0.5,
-        ) as hands:
+    t0 = time.time()
+    
         
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = hands.process(frame)
-
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = hands.process(frame)
+    t1 = time.time()
+    if debug:
+        print(f"model loading: {(t1-t0)*1000:.2f} ms")
     
+
+    t0 = time.time()
     if results.multi_hand_landmarks: 
         assert len(results.multi_hand_landmarks) <= 2, "More than 2 hands detected"
 
         if len(results.multi_hand_landmarks) == 2:
             hand_types = ["right", "left"]
         else:
-            
             hand_types = ["right"]
         
 
@@ -54,17 +53,22 @@ def detect_sign_language(frame, data, path):
                     data[f"{hand_type}_hand_{n}_y"].append(point.y)
                     data[f"{hand_type}_hand_{n}_z"].append(point.z)
 
-            
+        
+    t1 = time.time()
+    if debug:
+        print(f"processing: {(t1-t0)*1000:.2f} ms")
 
     return data
 
-def extract_video(path, data):
+def extract_video(path, data, hands):
     cap = cv2.VideoCapture(path)
 
     if not cap.isOpened():
         print("Error: Could not open video file")
         return 
-        
+    
+    
+    
     while True:
         ret, frame = cap.read()
         
@@ -72,23 +76,25 @@ def extract_video(path, data):
             print("End of video stream")
             return data
         
-        data = detect_sign_language(frame, data, path)
+        
+        data = detect_sign_language(frame, data, path, hands)
 
 
 
-def extract_file(data, videos, index):
+def extract_file(data, videos, index, hands):
+    
+    t0 = time.time()
     for path in videos:
-        data = extract_video(f"data/videos/{path}", data)
+        data = extract_video(f"data/videos/{path}", data, hands)
 
         
-        t0 = time.time()
-        df = pd.DataFrame(data)
+    df = pd.DataFrame(data)
         # TODO: must make video_id index
-        df.to_parquet(f"data/files/{index}.parquet", index=False)
+    df.to_parquet(f"data/files/{index}.parquet", index=False)
         
 
-        t1 = time.time()
-        print(f"Time taken: {t1-t0}")
+    t1 = time.time()
+    print(f"Time taken: {t1-t0}")
 
 
 
@@ -100,14 +106,21 @@ def main():
     data = {col: [] for col in cols}
     
     
-    vid_per_file = 2
+    mp_hands = mp.solutions.hands
+    hands = mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=2,
+            min_detection_confidence=0.5,
+            )
+
+    vid_per_file = 5
 
     videos = os.listdir("data/videos")
     indexes = [i for i in range(0, len(videos),vid_per_file)]
 
-
     for index, interval in enumerate(indexes):
-        extract_file(data, videos[interval:interval+vid_per_file], index)
+
+        extract_file(data, videos[interval:interval+vid_per_file], index, hands)
 
     
     
