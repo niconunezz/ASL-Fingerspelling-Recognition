@@ -21,10 +21,13 @@ def detect_sign_language(frame, data, path, hands, debug = False):
 
     t0 = time.time()
     if results.multi_hand_landmarks: 
-        assert len(results.multi_hand_landmarks) <= 2, "More than 2 hands detected"
+        assert len(results.multi_hand_landmarks) <= 3, f"More than 2 hands detected in {path}, got {len(results.multi_hand_landmarks)}"
+        if len(results.multi_hand_landmarks) == 3:
+            results.multi_hand_landmarks = results.multi_hand_landmarks[:2]
 
         if len(results.multi_hand_landmarks) == 2:
             hand_types = ["right", "left"]
+        
         else:
             hand_types = ["right"]
         
@@ -110,7 +113,7 @@ def main():
     hands = mp_hands.Hands(
             static_image_mode=False,
             max_num_hands=2,
-            min_detection_confidence=0.5,
+            min_detection_confidence=0.65,
             )
 
     vid_per_file = 5
