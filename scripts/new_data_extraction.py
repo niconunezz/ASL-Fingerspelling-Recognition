@@ -3,15 +3,14 @@ import mediapipe as mp
 import pandas as pd
 import os
 import time
-import subprocess
+import numpy as np
 
 
 
-def detect_sign_language(frame, data, path, hands, debug = False):
+def detect_sign_language(frame, data, path, hands, video_id, fnum, debug = False):
     
     t0 = time.time()
-    
-        
+            
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(frame)
     t1 = time.time()
@@ -31,9 +30,10 @@ def detect_sign_language(frame, data, path, hands, debug = False):
         else:
             hand_types = ["right"]
         
-
-        data["video_id"].append(path)
-      
+        
+        data["video_id"].append(video_id)
+        data["frame"].append(fnum)
+        fnum += 1
         mhand_landmarks = results.multi_hand_landmarks
         if len(results.multi_hand_landmarks) == 1:
             for point, n in zip(mhand_landmarks[0].landmark, [i for i in range(21)]):
@@ -61,17 +61,18 @@ def detect_sign_language(frame, data, path, hands, debug = False):
     if debug:
         print(f"processing: {(t1-t0)*1000:.2f} ms")
 
-    return data
+    return data, fnum
 
 def extract_video(path, data, hands):
     cap = cv2.VideoCapture(path)
 
+    video_id = path.split("/")[-1].split(".")[0]
     if not cap.isOpened():
         print("Error: Could not open video file")
         return 
     
     
-    
+    counter = 0
     while True:
         ret, frame = cap.read()
         
@@ -79,8 +80,7 @@ def extract_video(path, data, hands):
             print("End of video stream")
             return data
         
-        
-        data = detect_sign_language(frame, data, path, hands)
+        data, counter = detect_sign_language(frame, data, path, hands, video_id, fnum = counter)
 
 
 
@@ -90,11 +90,14 @@ def extract_file(data, videos, index, hands):
     for path in videos:
         data = extract_video(f"data/videos/{path}", data, hands)
 
-        
+    
     df = pd.DataFrame(data)
-        # TODO: must make video_id index
-    df.to_parquet(f"data/files/{index}.parquet", index=False)
-        
+    df = df.set_index("video_id")
+
+    
+    df.to_parquet(f"data/files/{index}.parquet", index=True)
+    
+    
 
     t1 = time.time()
     print(f"Time taken: {t1-t0}")
@@ -106,6 +109,7 @@ def main():
 
     cols = [f"{hand}_{i}_{dim}" for hand in ["right_hand", "left_hand"] for i in range(21) for dim in ['x', 'y', 'z']]
     cols.append("video_id")
+    cols.append("frame")
     data = {col: [] for col in cols}
     
     
@@ -122,7 +126,6 @@ def main():
     indexes = [i for i in range(0, len(videos),vid_per_file)]
 
     for index, interval in enumerate(indexes):
-
         extract_file(data, videos[interval:interval+vid_per_file], index, hands)
 
     
