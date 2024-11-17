@@ -9,12 +9,12 @@ from pathlib import Path
 
 class Extractor():
     def __init__(self):
-        self.train_df = train_df = pd.read_csv("data/newtrain.csv", dtype_backend='pyarrow')
+        self.train_df = train_df = pd.read_csv("data/sequences.csv", dtype_backend='pyarrow')
         self.sequence_to_phrase = dict(zip(train_df.sequence_id, train_df.phrase))
         self.unique_files = unique_files = train_df.file_id.unique()
-        self.file_to_sequences = file_to_sequences = {file : list(map(self.ensure_5_dig ,train_df.loc[train_df['file_id'] == file].sequence_id.values.tolist())) for file in unique_files}
+        self.file_to_sequences = {file : list(map(self.ensure_5_dig ,train_df.loc[train_df['file_id'] == file].sequence_id.values.tolist())) for file in unique_files}
         
-        self.base_out_dir = Path("data/newtensors")
+        self.base_out_dir = Path("data/ttensors")
     
     def ensure_5_dig(self, x):
         x = str(x)
@@ -30,7 +30,7 @@ class Extractor():
 
         start = 0
         arr = []
-        for n in range(1, 22):
+        for n in range(1, 43):
             c = curr_sqnce.iloc[:, start: start+(3)]
             v = c.to_numpy()
             arr.append(v.reshape(-1, 1, 3))
@@ -42,12 +42,12 @@ class Extractor():
         
         if debug:
             print(f"processing {(time.time() - process_start)*100} ms")
-        assert array.shape[1] == 21 and array.shape[2] == 3, f"Shape mismatch: {array.shape}"
+        assert array.shape[1] == 42 and array.shape[2] == 3, f"Shape mismatch: {array.shape}"
 
         save_start = time.time()
         output_dir = self.base_out_dir
                
-        np.save(output_dir / f"{sequence}.npy", np.array(array))
+        np.save(output_dir / f"{sequence.lstrip('0')}.npy", np.array(array))
 
         if debug:
             print(f"saving {(time.time() - save_start)*100:.2f} ms")
@@ -61,9 +61,10 @@ class Extractor():
         file_start = time.time()
         parquet_start = time.time()
         try:
-            f = pd.read_parquet(f"data/files/{file}.parquet", columns = cols, engine='pyarrow')
+            f = pd.read_parquet(f"data/tfiles/{file}.parquet", columns = cols, engine='pyarrow')
         except Exception as e:
-            pass
+            print(f"Error with {file}")
+            return
         if debug:
             print(f"parquet read {(time.time() - parquet_start)*100:.2f} ms")
         

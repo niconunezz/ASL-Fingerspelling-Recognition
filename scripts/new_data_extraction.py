@@ -107,7 +107,7 @@ def extract_file(data, videos, index, hands, debug = False):
     df = df.set_index("video_id")
 
     
-    df.to_parquet(f"data/files/{index}.parquet", index=True)
+    df.to_parquet(f"data/tfiles/{index}.parquet", index=True)
     
     
 
@@ -133,9 +133,9 @@ def main():
             min_detection_confidence=0.65,
             )
 
-    vid_per_file = 100
+    vid_per_file = 1000
 
-    videos = os.listdir("data/videos")[:1000]
+    videos = os.listdir("data/videos")
     indexes = [i for i in range(0, len(videos),vid_per_file)]
 
     for index, interval in enumerate(indexes):
