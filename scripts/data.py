@@ -1,10 +1,8 @@
-import os
 import json
 import time
 import torch
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
 import torch.nn.functional as F
@@ -42,7 +40,7 @@ def padd_or_interpolate(x, max_len, pad_token: int = 100259):
             return matrix, mask
         
         else:
-            diff = max_len - x.shape[0]
+            diff = max(max_len - x.shape[0], 0)
             pad = torch.full((diff, x.shape[1], x.shape[2]), pad_token)
             matrix = torch.cat((x, pad), dim=0)
             assert matrix.shape[0] == max_len
@@ -56,24 +54,33 @@ def padd_or_interpolate(x, max_len, pad_token: int = 100259):
 
 
 def padd_sequence(x, max_len, pad_token: int = 100259):
-    return np.pad(x, ((0, max_len - x.shape[0])), mode='constant', constant_values = pad_token)
+    pad = max(0, max_len - x.shape[0])
+    return np.pad(x, ((0, pad)), mode='constant', constant_values = pad_token)
             
 
 
 
 
 class CustomDataset(Dataset):
-    def __init__(self, cfg , folder ="1", mode = "train", aug = None, verbose: bool = False) -> None:
+    def __init__(self, cfg, folder = '1', mode = "train", aug = None, verbose: bool = False) -> None:
         
         self.verbose = verbose
         self.config = cfg
-        self.path = f"data/tensors2/{folder}"
-        # self.tokenizer = self.setup_tokenizer()
-        self.tokenizer, self.eos, self.pad = self.setup_tokenizer2().values()
+        self.path = cfg.data_path
+        if cfg.folder is not None:
+            self.path = f"{self.path}/{cfg.folder}"
+        
+        self.folder = cfg.folder
+        
+        self.tokenizer, self.eos, self.pad = self.setup_tokenizer().values()
+        # self.tokenizer, self.eos, self.pad = self.setup_tokenizer2().values()
 
         self.aug = aug
 
-        self.df = df = pd.read_csv("data/train.csv").query(f"fold == {folder}").reset_index(drop = True)
+        self.df = df = pd.read_csv(cfg.csv_path)
+        if self.folder:
+            self.df = self.df.query(f"fold == {folder}").reset_index(drop = True)
+
         if cfg.max_ex:
             self.df = df = df.iloc[:cfg.max_ex]
         if mode == "train":
@@ -117,8 +124,8 @@ class CustomDataset(Dataset):
             print(f"Preprocessing took {(t1-t0)*1000:.2f} ms")
         
         t0 = time.time()
-        # y = np.array([self.tokenizer[char] for char in list(phrase)])
-        y = np.array(self.tokenizer.encode(phrase))
+        y = np.array([self.tokenizer[char] for char in list(phrase)])
+        # y = np.array(self.tokenizer.encode(phrase))
        
         t1 = time.time()
         if self.verbose:
@@ -151,9 +158,12 @@ class CustomDataset(Dataset):
     def setup_tokenizer(self):
         self.tokenizer = json.load(open("data/supplemental_landmarks/character_to_prediction_index.json"))
 
+        self.tokenizer["<bos>"] = 59
         self.tokenizer["<eos>"] = 60
         self.tokenizer["<pad>"] = 61
-        return self.tokenizer 
+        return {"tokenizer":self.tokenizer,
+                "eos":60,
+                "pad":61}
     
     def setup_tokenizer2(self):
         enc = tiktoken.get_encoding("cl100k_base")
