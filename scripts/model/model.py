@@ -109,7 +109,7 @@ class Net(nn.Module):
         self.encoder = nn.ModuleList([SqueezeformerBlock(config) for _ in range(config.encoder_layers)])
         self.decoder = Decoder(decoder_cfg)
 
-    def forward(self, data, mask, targets, verbose = False):
+    def forward(self, data, mask, targets, attn_mask, verbose = False):
 
         import time 
 
@@ -149,7 +149,7 @@ class Net(nn.Module):
             print(f"Encoder took {(t1-t0)*1000} Mseconds")
         t0 = time.time()
 
-        xc = self.decoder(xc, labels = targets, encoder_attention_mask= mask.long())
+        xc = self.decoder(xc, labels = targets,attention_mask = attn_mask, encoder_attention_mask= mask.long())
         t1 = time.time()
         if verbose:
             print(f"Decoder took {(t1-t0)*1000} Mseconds")

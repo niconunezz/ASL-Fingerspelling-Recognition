@@ -54,8 +54,10 @@ def padd_or_interpolate(x, max_len, pad_token: int = 100259):
 
 
 def padd_sequence(x, max_len, pad_token: int = 100259):
+    att_mask = torch.ones((x.shape[0]))
     pad = max(0, max_len - x.shape[0])
-    return np.pad(x, ((0, pad)), mode='constant', constant_values = pad_token)
+    att_mask = torch.cat([att_mask, torch.zeros(pad)])
+    return np.pad(x, ((0, pad)), mode='constant', constant_values = pad_token), att_mask
             
 
 
@@ -94,7 +96,7 @@ class CustomDataset(Dataset):
     def __len__(self) -> int:
         return len(self.df)
 
-    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
+    def __getitem__(self, idx: int) -> dict:
         
         t0 = time.time()
         row = self.df.iloc[idx]
@@ -138,12 +140,13 @@ class CustomDataset(Dataset):
         t0 = time.time()
 
         x, mask = padd_or_interpolate(x, self.config.block_size, self.pad)
-        y = padd_sequence(y, self.config.max_seq_len, self.pad)
+        y, att_mask = padd_sequence(y, self.config.max_seq_len, self.pad)
+        
         t1 = time.time()
         if self.verbose:
             print(f"Padding took {(t1-t0)*1000:.2f} ms")
 
-        return {"data": x, "mask": mask, "target": y}
+        return {"data": x, "mask": mask, "target": y, 'att_mask': att_mask}
 
 
     def load_seq(self, seq):
