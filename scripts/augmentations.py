@@ -124,3 +124,22 @@ class SpatialAffine(BasicTransform):
 
 
 
+class FingerDrop(BasicTransform):
+    def __init__(self, mask_value = float('nan'), p= 1.):
+        super(FingerDrop, self).__init__(always_apply=False, p=p)
+        self.mask_value = mask_value
+
+    def apply(self, data, **params):
+        fingers = data[:, 1:]
+
+        fidx = np.random.randint(0, fingers.shape[1], size=(10,))
+        
+        data[:, fidx] = self.mask_value
+
+        return data
+    
+    @property
+    def targets(self):
+        return {"image": self.apply}
+
+

@@ -13,19 +13,19 @@ cfg = SimpleNamespace(**{})
 #cfg.n_land_el = 4
 # cfg.out_dim = 208
 
-cfg.n_dim= 128
+cfg.n_dim= 32
 cfg.n_heads = 4
 cfg.block_size = 64
 cfg.max_seq_len = 20
 cfg.total_lm = 42
 cfg.n_land_el = 2
-cfg.out_dim = 128
+cfg.out_dim = cfg.n_dim
 
 cfg.encoder_layers = 1
 # cfg.vocab_size = 100277
 cfg.vocab_size = 62
 
-cfg.n_layer = 1
+cfg.n_layer = 2
 cfg.dropout= 0.3
 cfg.device = "cuda" if torch.cuda.is_available() else "cpu"
 cfg.val_files = 16
@@ -34,7 +34,10 @@ cfg.max_ex = None
 cfg.aug = A.Compose([A.Resample(sample_rate = (0.3, 2.), p = 0.8),
                      #A.TemporalCrop(length = 384, p = 0.5),
                      A.TimeShift(p = 0.5),
-                     A.SpatialAffine(scale=(0.7,1.3),shear=(-0.2,0.2),shift=(-0.15,0.15),degree=(-30,30),p=0.75)])
+                     A.SpatialAffine(scale=(0.7,1.3),shear=(-0.2,0.2),shift=(-0.15,0.15),degree=(-30,30),p=0.75),
+                     A.FingerDrop(mask_value=0.,p=1.),
+                    ]
+                     )
 
 cfg.data_path = "data/ttensors"
 cfg.csv_path = "data/sequences.csv"
